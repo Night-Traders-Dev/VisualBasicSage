@@ -178,7 +178,7 @@ proc lex(source):
     elif ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "^" or ch == "\\" or ch == "=" or ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "@":
       read_operator()
 
-    elif ch == "(" or ch == ")" or ch == "," or ch == "." or ch == "{":
+    elif ch == "(" or ch == ")" or ch == "," or ch == "." or ch == "{" or ch == ":":
       push(tokens, make_token(TOKEN_DELIMITER, advance(), line, start_col))
 
     else:

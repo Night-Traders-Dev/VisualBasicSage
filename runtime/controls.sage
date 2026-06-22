@@ -67,7 +67,7 @@ class ListBox(Control):
     self.multi_select = 0
 
   proc add_item(self, item):
-    self.items = push(self.items, item)
+    push(self.items, item)
 
   proc remove_item(self, index):
     # TODO: implement removal

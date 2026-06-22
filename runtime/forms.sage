@@ -13,7 +13,7 @@ class Form:
     self.events = {}
 
   proc add_control(self, control):
-    self.controls = push(self.controls, control)
+    push(self.controls, control)
 
   proc show(self):
     self.visible = true
