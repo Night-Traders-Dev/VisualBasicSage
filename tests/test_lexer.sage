@@ -7,7 +7,7 @@ proc test_simple_tokens():
   let result = lx.lex("Sub Main\nEnd Sub")
   let expected_types = [
     lx.TOKEN_KEYWORD, lx.TOKEN_IDENTIFIER, lx.TOKEN_NEWLINE,
-    lx.TOKEN_KEYWORD, lx.TOKEN_IDENTIFIER, lx.TOKEN_EOF
+    lx.TOKEN_KEYWORD, lx.TOKEN_KEYWORD, lx.TOKEN_EOF
   ]
   if len(result) != len(expected_types):
     print "FAIL: test_simple_tokens: expected " + str(len(expected_types)) + " tokens, got " + str(len(result))
@@ -33,7 +33,7 @@ proc test_keyword_recognition():
   return true
 
 proc test_string_literal():
-  let result = lx.lex('MsgBox "Hello, World!"')
+  let result = lx.lex("MsgBox \"Hello, World!\"")
   if len(result) < 3:
     print "FAIL: test_string_literal: too few tokens"
     return false

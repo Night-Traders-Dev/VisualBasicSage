@@ -172,7 +172,7 @@ proc parse(tokens):
     let args = []
     while not check(lx.TOKEN_DELIMITER, ")"):
       skip_newlines()
-      args = push(args, parse_expression())
+      push(args, parse_expression())
       if check(lx.TOKEN_DELIMITER, ","):
         advance()
     expect(lx.TOKEN_DELIMITER, ")")
@@ -196,7 +196,7 @@ proc parse(tokens):
       if check(lx.TOKEN_KEYWORD, "As"):
         advance()
         as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
-      params = push(params, ast.Param(name, as_type, by_ref))
+      push(params, ast.Param(name, as_type, by_ref))
       if check(lx.TOKEN_DELIMITER, ","):
         advance()
     expect(lx.TOKEN_DELIMITER, ")")
@@ -207,7 +207,7 @@ proc parse(tokens):
     let dims = []
     while not check(lx.TOKEN_DELIMITER, ")"):
       skip_newlines()
-      dims = push(dims, parse_expression())
+      push(dims, parse_expression())
       if check(lx.TOKEN_DELIMITER, ","):
         advance()
     expect(lx.TOKEN_DELIMITER, ")")
@@ -230,7 +230,7 @@ proc parse(tokens):
           break
       let stmt = parse_statement()
       if stmt != nil:
-        stmts = push(stmts, stmt)
+        push(stmts, stmt)
       skip_newlines()
     return ast.Block(stmts)
 
@@ -287,7 +287,7 @@ proc parse(tokens):
       if check(lx.TOKEN_KEYWORD, "As"):
         advance()
         as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
-      vars = push(vars, ast.VariableDecl(name, as_type))
+      push(vars, ast.VariableDecl(name, as_type))
       if not check(lx.TOKEN_DELIMITER, ","):
         break
       advance()
@@ -318,7 +318,7 @@ proc parse(tokens):
       expect(lx.TOKEN_KEYWORD, "Then")
       skip_newlines()
       let body = parse_block(["Else", "ElseIf", "End", "End If"])
-      else_if_clauses = push(else_if_clauses, ast.ElseIfClause(cond, body))
+      push(else_if_clauses, ast.ElseIfClause(cond, body))
     if check(lx.TOKEN_KEYWORD, "Else"):
       advance()
       skip_newlines()
@@ -339,12 +339,12 @@ proc parse(tokens):
       advance()
       let values = []
       while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-        values = push(values, parse_expression())
+        push(values, parse_expression())
         if check(lx.TOKEN_DELIMITER, ","):
           advance()
       skip_newlines()
       let body = parse_block(["Case", "End", "End Select"])
-      cases = push(cases, ast.CaseClause(values, body))
+      push(cases, ast.CaseClause(values, body))
     if check(lx.TOKEN_KEYWORD, "End"):
       advance()
       if check(lx.TOKEN_KEYWORD, "Select"):
@@ -484,7 +484,7 @@ proc parse(tokens):
     let names = [expect(lx.TOKEN_IDENTIFIER)["value"]]
     while check(lx.TOKEN_DELIMITER, ","):
       advance()
-      names = push(names, expect(lx.TOKEN_IDENTIFIER)["value"])
+      push(names, expect(lx.TOKEN_IDENTIFIER)["value"])
     return ast.EraseStatement(names)
 
   proc parse_set_stmt():
@@ -512,8 +512,17 @@ proc parse(tokens):
       advance()
       let value = parse_expression()
       return ast.Assignment(ast.Identifier(name), value)
-    # Bare identifier as statement (implicit call)
-    return ast.CallStatement(name, [])
+    # Implicit call with arguments (VB4: MsgBox "Hello")
+    # Parse comma-separated expressions until newline
+    let args = []
+    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+      push(args, parse_expression())
+      if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
+        if not check(lx.TOKEN_DELIMITER, ","):
+          break
+    return ast.CallStatement(name, args)
 
   # --- Top-level declarations ---
 
@@ -586,7 +595,7 @@ proc parse(tokens):
       if check(lx.TOKEN_KEYWORD, "As"):
         advance()
         as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
-      fields = push(fields, ast.VariableDecl(field_name, as_type))
+      push(fields, ast.VariableDecl(field_name, as_type))
       skip_newlines()
     if check(lx.TOKEN_KEYWORD, "End"):
       advance()
@@ -606,7 +615,7 @@ proc parse(tokens):
       if check(lx.TOKEN_OPERATOR, "="):
         advance()
         member_value = parse_expression()
-      members = push(members, {"name": member_name, "value": member_value})
+      push(members, {"name": member_name, "value": member_value})
       skip_newlines()
     if check(lx.TOKEN_KEYWORD, "End"):
       advance()
@@ -621,15 +630,15 @@ proc parse(tokens):
   let module = ast.Module()
   while not check(lx.TOKEN_EOF):
     if check(lx.TOKEN_KEYWORD, "Sub"):
-      module.declarations = push(module.declarations, parse_sub())
+      push(module.declarations, parse_sub())
     elif check(lx.TOKEN_KEYWORD, "Function"):
-      module.declarations = push(module.declarations, parse_function())
+      push(module.declarations, parse_function())
     elif check(lx.TOKEN_KEYWORD, "Property"):
-      module.declarations = push(module.declarations, parse_property())
+      push(module.declarations, parse_property())
     elif check(lx.TOKEN_KEYWORD, "Type"):
-      module.declarations = push(module.declarations, parse_type())
+      push(module.declarations, parse_type())
     elif check(lx.TOKEN_KEYWORD, "Enum"):
-      module.declarations = push(module.declarations, parse_enum())
+      push(module.declarations, parse_enum())
     elif check(lx.TOKEN_KEYWORD, "Declare"):
       # Skip Declare statements for now
       advance()
@@ -640,7 +649,7 @@ proc parse(tokens):
       let params = []
       if check(lx.TOKEN_DELIMITER, "("):
         params = parse_params()
-      module.declarations = push(module.declarations, ast.EventDecl(name, params))
+      push(module.declarations, ast.EventDecl(name, params))
     elif check(lx.TOKEN_KEYWORD, "Option"):
       advance()
       skip_newlines()

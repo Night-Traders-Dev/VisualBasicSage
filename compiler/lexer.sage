@@ -108,9 +108,11 @@ proc lex(source):
         value = value + advance()
       else:
         break
-    let type_ = TOKEN_FLOAT if is_float else TOKEN_INTEGER
+    let type_ = TOKEN_INTEGER
+    if is_float:
+      type_ = TOKEN_FLOAT
     let start_col = col - len(value)
-    tokens = push(tokens, make_token(type_, value, line, start_col))
+    push(tokens, make_token(type_, value, line, start_col))
 
   ## Read an identifier or keyword
   proc read_identifier():
@@ -122,19 +124,23 @@ proc lex(source):
       else:
         break
     let start_col = col - len(value)
-    let type_ = TOKEN_KEYWORD if is_keyword(value) else TOKEN_IDENTIFIER
-    tokens = push(tokens, make_token(type_, value, line, start_col))
+    let type_ = TOKEN_IDENTIFIER
+    if is_keyword(value):
+      type_ = TOKEN_KEYWORD
+    push(tokens, make_token(type_, value, line, start_col))
 
   ## Read an operator
   proc read_operator():
     let start_col = col
     let ch = advance()
     let value = ch
-    if (ch == "=" or ch == "<" or ch == ">" or ch == "!") and peek() == "=":
+    if ch == "<" and peek() == ">":
+      value = value + advance()
+    elif (ch == "=" or ch == "<" or ch == ">" or ch == "!") and peek() == "=":
       value = value + advance()
     elif (ch == "&" or ch == "@") and (peek() == "&" or peek() == "@"):
       value = value + advance()
-    tokens = push(tokens, make_token(TOKEN_OPERATOR, value, line, start_col))
+    push(tokens, make_token(TOKEN_OPERATOR, value, line, start_col))
 
   ## Main tokenization loop
   while pos < src_len:
@@ -151,13 +157,13 @@ proc lex(source):
       let comment = ""
       while pos < src_len and peek() != "\n":
         comment = comment + advance()
-      tokens = push(tokens, make_token(TOKEN_COMMENT, comment, line, start_col))
+      push(tokens, make_token(TOKEN_COMMENT, comment, line, start_col))
 
     elif ch == "\"":
       # String literal
       advance()
       let value = read_string("\"")
-      tokens = push(tokens, make_token(TOKEN_STRING, value, line, start_col))
+      push(tokens, make_token(TOKEN_STRING, value, line, start_col))
 
     elif ch >= "0" and ch <= "9":
       read_number()
@@ -167,16 +173,16 @@ proc lex(source):
 
     elif ch == "\n":
       advance()
-      tokens = push(tokens, make_token(TOKEN_NEWLINE, "\n", line - 1, col))
+      push(tokens, make_token(TOKEN_NEWLINE, "\n", line - 1, col))
 
     elif ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "^" or ch == "\\" or ch == "=" or ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "@":
       read_operator()
 
     elif ch == "(" or ch == ")" or ch == "," or ch == "." or ch == "{":
-      tokens = push(tokens, make_token(TOKEN_DELIMITER, advance(), line, start_col))
+      push(tokens, make_token(TOKEN_DELIMITER, advance(), line, start_col))
 
     else:
       raise "Unexpected character " + ch + " at line " + str(line)
 
-  tokens = push(tokens, make_token(TOKEN_EOF, "", line, col))
+  push(tokens, make_token(TOKEN_EOF, "", line, col))
   return tokens
