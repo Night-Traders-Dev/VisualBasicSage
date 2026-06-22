@@ -1,0 +1,8 @@
+*.sage.py
+*.o
+*.so
+*.bin
+*.exe
+__pycache__/
+.sage/
+.DS_Store
