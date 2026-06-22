@@ -16,7 +16,7 @@ class PropertyWindow:
     let props = []
     for key in dict_keys(self.selected_object):
       let val = self.selected_object[key]
-      props = push(props, {"name": key, "value": val, "type": type(val)})
+      push(props, {"name": key, "value": val, "type": type(val)})
     return props
 
   proc set_property(self, name, value):

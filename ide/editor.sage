@@ -53,9 +53,9 @@ class CodeEditor:
     # Insert new line after current
     let new_lines = []
     for i in range(len(self.lines)):
-      new_lines = push(new_lines, self.lines[i])
+      push(new_lines, self.lines[i])
       if i == self.cursor_line:
-        new_lines = push(new_lines, after)
+        push(new_lines, after)
     self.lines = new_lines
     self.cursor_line = self.cursor_line + 1
     self.cursor_col = 0

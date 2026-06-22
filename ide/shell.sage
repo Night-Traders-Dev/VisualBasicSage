@@ -14,12 +14,12 @@ class IdeShell:
 
   proc create_menu(self, caption):
     let menu = {"caption": caption, "items": []}
-    self.menus = push(self.menus, menu)
+    push(self.menus, menu)
     return menu
 
   proc add_menu_item(self, menu, caption, shortcut="", handler=nil):
     let item = {"caption": caption, "shortcut": shortcut, "handler": handler}
-    menu["items"] = push(menu["items"], item)
+    push(menu["items"], item)
 
   proc show_status(self, text):
     self.status_text = text

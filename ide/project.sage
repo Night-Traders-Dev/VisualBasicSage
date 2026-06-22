@@ -28,13 +28,13 @@ class Project:
     self.icon = nil
 
   proc add_form(self, form_path):
-    self.forms = push(self.forms, form_path)
+    push(self.forms, form_path)
 
   proc add_module(self, module_path):
-    self.modules = push(self.modules, module_path)
+    push(self.modules, module_path)
 
   proc add_class(self, class_path):
-    self.classes = push(self.classes, class_path)
+    push(self.classes, class_path)
 
   proc add_reference(self, ref):
-    self.references = push(self.references, ref)
+    push(self.references, ref)
