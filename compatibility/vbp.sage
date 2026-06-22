@@ -1,9 +1,11 @@
 # VBP Parser - parses Visual Basic Project (.vbp) files
 
+import strings
+
 ## Parse a .vbp project file into a project structure
 proc parse_vbp(path):
   let content = io.readfile(path)
-  let lines = content.split("\n")
+  let lines = strings.split(content, "\n")
   let project = {
     "type": "Standard EXE",
     "name": "",
@@ -19,31 +21,30 @@ proc parse_vbp(path):
   }
 
   for line in lines:
-    let trimmed = strip(line)
-    if trimmed == "" or startswith(trimmed, "'"):
+    let trimmed = strings.strip(line)
+    if trimmed == "" or strings.startswith(trimmed, "'"):
       continue
 
-    if startswith(trimmed, "Type="):
+    if strings.startswith(trimmed, "Type="):
       project["type"] = trimmed[5:]
-    elif startswith(trimmed, "Name="):
+    elif strings.startswith(trimmed, "Name="):
       project["name"] = trimmed[5:]
-    elif startswith(trimmed, "Startup="):
+    elif strings.startswith(trimmed, "Startup="):
       project["startup"] = trimmed[8:]
-    elif startswith(trimmed, "Form="):
-      # Form=formname.frm
-      let parts = trimmed[5:].split(";")
-      project["forms"] = push(project["forms"], parts[0])
-    elif startswith(trimmed, "Module="):
-      let parts = trimmed[7:].split(";")
-      project["modules"] = push(project["modules"], parts[0])
-    elif startswith(trimmed, "Class="):
-      let parts = trimmed[6:].split(";")
-      project["classes"] = push(project["classes"], parts[0])
-    elif startswith(trimmed, "Reference="):
-      project["references"] = push(project["references"], trimmed[10:])
-    elif startswith(trimmed, "Title="):
+    elif strings.startswith(trimmed, "Form="):
+      let parts = strings.split(trimmed[5:], ";")
+      push(project["forms"], parts[0])
+    elif strings.startswith(trimmed, "Module="):
+      let parts = strings.split(trimmed[7:], ";")
+      push(project["modules"], parts[0])
+    elif strings.startswith(trimmed, "Class="):
+      let parts = strings.split(trimmed[6:], ";")
+      push(project["classes"], parts[0])
+    elif strings.startswith(trimmed, "Reference="):
+      push(project["references"], trimmed[10:])
+    elif strings.startswith(trimmed, "Title="):
       project["title"] = trimmed[6:]
-    elif startswith(trimmed, "ExeName32="):
+    elif strings.startswith(trimmed, "ExeName32="):
       project["exe_name"] = trimmed[10:]
 
   return project
@@ -51,20 +52,20 @@ proc parse_vbp(path):
 ## Write a project structure to .vbp format
 proc write_vbp(project, path):
   let lines = []
-  lines = push(lines, "Type=" + project["type"])
-  lines = push(lines, "Name=" + project["name"])
+  push(lines, "Type=" + project["type"])
+  push(lines, "Name=" + project["name"])
   if project["startup"] != "":
-    lines = push(lines, "Startup=" + project["startup"])
+    push(lines, "Startup=" + project["startup"])
   for f in project["forms"]:
-    lines = push(lines, "Form=" + f)
+    push(lines, "Form=" + f)
   for m in project["modules"]:
-    lines = push(lines, "Module=" + m)
+    push(lines, "Module=" + m)
   for c in project["classes"]:
-    lines = push(lines, "Class=" + c)
+    push(lines, "Class=" + c)
   for r in project["references"]:
-    lines = push(lines, "Reference=" + r)
+    push(lines, "Reference=" + r)
   if project["title"] != "":
-    lines = push(lines, "Title=" + project["title"])
+    push(lines, "Title=" + project["title"])
   if project["exe_name"] != "":
-    lines = push(lines, "ExeName32=" + project["exe_name"])
-  io.writefile(path, join(lines, "\n"))
+    push(lines, "ExeName32=" + project["exe_name"])
+  io.writefile(path, strings.join(lines, "\n"))
