@@ -38,7 +38,7 @@ proc parse(tokens):
     return true
 
   proc skip_newlines():
-    while check(lx.TOKEN_NEWLINE):
+    while check(lx.TOKEN_NEWLINE) or check(lx.TOKEN_COMMENT):
       advance()
 
   # --- Expression parsing (12 precedence levels) ---
@@ -338,10 +338,15 @@ proc parse(tokens):
     while check(lx.TOKEN_KEYWORD, "Case"):
       advance()
       let values = []
-      while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-        push(values, parse_expression())
-        if check(lx.TOKEN_DELIMITER, ","):
-          advance()
+      # Handle "Case Else" (catch-all)
+      if check(lx.TOKEN_KEYWORD, "Else"):
+        advance()
+        # values stays empty to indicate catch-all
+      else:
+        while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
+          push(values, parse_expression())
+          if check(lx.TOKEN_DELIMITER, ","):
+            advance()
       skip_newlines()
       let body = parse_block(["Case", "End", "End Select"])
       push(cases, ast.CaseClause(values, body))

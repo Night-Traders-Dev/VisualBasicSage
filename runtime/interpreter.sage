@@ -54,39 +54,39 @@ class Interpreter:
   proc init(self):
     self.global_env = Environment()
     self.builtins = {
-      "Print": b.vb_print,
-      "MsgBox": b.vb_msgbox,
-      "InputBox": b.vb_inputbox,
-      "Len": b.vb_len,
-      "Asc": b.vb_asc,
-      "Chr": b.vb_chr,
-      "Left": b.vb_left,
-      "Right": b.vb_right,
-      "Mid": b.vb_mid,
-      "UCase": b.vb_ucase,
-      "LCase": b.vb_lcase,
-      "Trim": b.vb_trim,
-      "Replace": b.vb_replace,
-      "Int": b.vb_int,
-      "Fix": b.vb_fix,
-      "Abs": b.vb_abs,
-      "Sgn": b.vb_sgn,
-      "Rnd": b.vb_rnd,
-      "Randomize": b.vb_randomize,
-      "Now": b.vb_now,
-      "IsNumeric": b.vb_isnumeric,
-      "CStr": b.vb_cstr,
-      "CInt": b.vb_cint,
-      "CLng": b.vb_clng,
-      "CSng": b.vb_csng,
-      "CDbl": b.vb_cdbl,
-      "CBool": b.vb_cbool,
-      "Hex": b.vb_hex,
-      "Oct": b.vb_oct,
-      "Format": b.vb_format,
-      "Array": b.vb_array,
-      "UBound": b.vb_ubound,
-      "LBound": b.vb_lbound
+      "Print": [b.vb_print, -1],  # -1 = pass whole args array
+      "MsgBox": [b.vb_msgbox, 3],
+      "InputBox": [b.vb_inputbox, 3],
+      "Len": [b.vb_len, 1],
+      "Asc": [b.vb_asc, 1],
+      "Chr": [b.vb_chr, 1],
+      "Left": [b.vb_left, 2],
+      "Right": [b.vb_right, 2],
+      "Mid": [b.vb_mid, 3],
+      "UCase": [b.vb_ucase, 1],
+      "LCase": [b.vb_lcase, 1],
+      "Trim": [b.vb_trim, 1],
+      "Replace": [b.vb_replace, 3],
+      "Int": [b.vb_int, 1],
+      "Fix": [b.vb_fix, 1],
+      "Abs": [b.vb_abs, 1],
+      "Sgn": [b.vb_sgn, 1],
+      "Rnd": [b.vb_rnd, 0],
+      "Randomize": [b.vb_randomize, 1],
+      "Now": [b.vb_now, 0],
+      "IsNumeric": [b.vb_isnumeric, 1],
+      "CStr": [b.vb_cstr, 1],
+      "CInt": [b.vb_cint, 1],
+      "CLng": [b.vb_clng, 1],
+      "CSng": [b.vb_csng, 1],
+      "CDbl": [b.vb_cdbl, 1],
+      "CBool": [b.vb_cbool, 1],
+      "Hex": [b.vb_hex, 1],
+      "Oct": [b.vb_oct, 1],
+      "Format": [b.vb_format, 2],
+      "Array": [b.vb_array, 1],
+      "UBound": [b.vb_ubound, 2],
+      "LBound": [b.vb_lbound, 2]
     }
     self.current_return = nil
     self.current_exit = nil
@@ -201,6 +201,21 @@ class Interpreter:
       self.global_env.set(target.name, val)
     return val
 
+  proc call_builtin(self, fn_info, args):
+    let fn = fn_info[0]
+    let arity = fn_info[1]
+    if arity == -1:
+      return fn(args)
+    if arity == 0:
+      return fn()
+    if arity == 1:
+      return fn(args[0])
+    if arity == 2:
+      return fn(args[0], args[1])
+    if arity == 3:
+      return fn(args[0], args[1], args[2])
+    return fn()
+
   proc exec_call(self, node):
     let name = node.name
     let args = []
@@ -208,7 +223,7 @@ class Interpreter:
       push(args, self.eval_expression(arg))
     # Check builtins
     if dict_has(self.builtins, name):
-      self.builtins[name](args)
+      self.call_builtin(self.builtins[name], args)
       return nil
     # Check defined procedures
     let proc_def = self.global_env.get_proc(name)
@@ -272,10 +287,13 @@ class Interpreter:
   proc exec_select(self, node):
     let expr = self.eval_expression(node.expression)
     for c in node.cases:
+      if len(c.values) == 0:
+        # Catch-all (Case Else)
+        return self.exec_statement(c.body)
       for val_node in c.values:
-          let case_val = self.eval_expression(val_node)
-          if expr == case_val:
-            return self.exec_statement(c.body)
+        let case_val = self.eval_expression(val_node)
+        if expr == case_val:
+          return self.exec_statement(c.body)
     return nil
 
   proc exec_for(self, node):
@@ -441,7 +459,7 @@ class Interpreter:
     for arg in node.args:
       push(args, self.eval_expression(arg))
     if dict_has(self.builtins, name):
-      return self.builtins[name](args)
+      return self.call_builtin(self.builtins[name], args)
     let func_def = self.global_env.get_func(name)
     if func_def != nil:
       return self.exec_func_body(name, func_def["params"], func_def["body"], args)

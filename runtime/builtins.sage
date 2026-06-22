@@ -1,5 +1,7 @@
 # VB4 Built-in Functions mapped to Sage runtime
 
+import math
+
 ## Print: output to console
 proc vb_print(items):
   for item in items:

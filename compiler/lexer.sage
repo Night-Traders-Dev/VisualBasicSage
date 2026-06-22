@@ -151,8 +151,8 @@ proc lex(source):
     let ch = peek()
     let start_col = col
 
-    if ch == "'":
-      # Comment
+    if ch == "'" or ch == "#":
+      # Comment (VB4 single-quote or Sage-style hash)
       advance()
       let comment = ""
       while pos < src_len and peek() != "\n":
