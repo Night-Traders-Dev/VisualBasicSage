@@ -17,7 +17,8 @@ class Form:
 
   proc show(self):
     self.visible = true
-    # TODO: render window via graphics backend
+    import runtime.windower as w
+    w.show_form(self)
 
   proc hide(self):
     self.visible = false

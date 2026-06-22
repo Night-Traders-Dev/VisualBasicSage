@@ -26,7 +26,7 @@ class CommandButton(Control):
   proc init(self, name):
     super.init(name)
     self.caption = ""
-    self.default = false
+    self.is_default = false
     self.cancel = false
     self.style = 0  # 0=Standard, 1=Graphical
 
