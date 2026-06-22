@@ -20,7 +20,7 @@ let KEYWORDS = [
   "Wend",
   "Public", "Private", "Static",
   "Call", "Set", "Let",
-  "ByVal", "ByRef",
+  "ByVal", "ByRef", "Optional",
   "Integer", "Long", "Single", "Double",
   "String", "Boolean", "Variant",
   "ReDim", "Preserve",
@@ -31,11 +31,23 @@ let KEYWORDS = [
   "Property", "Get", "Let", "Set",
   "Friend", "Global",
   "Option", "Explicit", "Base", "Compare",
-  "On", "Error", "GoTo", "Resume",
-  "As", "To",
+  "On", "Error", "GoTo", "Resume", "Resume Next",
+  "As", "To", "Is",
   "With", "End With",
   "Event", "RaiseEvent",
-  "Implements"
+  "Implements",
+  "New", "Each", "In",
+  "Open", "Close", "Put", "Get", "Write", "Print", "Input",
+  "Output", "Append", "Binary", "Random",
+  "Read", "Shared", "Lock",
+  "GoSub", "Return",
+  "Line", "Circle", "PSet", "Cls",
+  "Load", "Unload",
+  "DefInt", "DefLng", "DefStr", "DefCur", "DefBool", "DefDate", "DefDbl", "DefSng",
+  "Rem", "Stop",
+  "Declare", "Lib", "Alias",
+  "ParamArray", "Empty",
+  "TypeOf", "AddressOf"
 ]
 
 ## Make a Token object
@@ -152,8 +164,8 @@ proc lex(source):
     let ch = peek()
     let start_col = col
 
-    if ch == "'" or ch == "#":
-      # Comment (VB4 single-quote or Sage-style hash)
+    if ch == "'":
+      # Comment (VB4 single-quote)
       advance()
       let comment = ""
       while pos < src_len and peek() != "\n":
@@ -176,7 +188,7 @@ proc lex(source):
       advance()
       push(tokens, make_token(TOKEN_NEWLINE, "\n", line - 1, col))
 
-    elif ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "^" or ch == "\\" or ch == "=" or ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "@":
+    elif ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "^" or ch == "\\" or ch == "=" or ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "@" or ch == "#":
       read_operator()
 
     elif ch == "(" or ch == ")" or ch == "," or ch == "." or ch == "{" or ch == ":":

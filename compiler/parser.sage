@@ -1,5 +1,6 @@
 # VB4 Parser - produces AST from token stream
 
+import strings
 import compiler.lexer as lx
 import compiler.ast as ast
 
@@ -257,6 +258,10 @@ proc parse(tokens):
       return parse_exit()
     if check(lx.TOKEN_KEYWORD, "GoTo"):
       return parse_goto()
+    if check(lx.TOKEN_KEYWORD, "GoSub"):
+      return parse_gosub()
+    if check(lx.TOKEN_KEYWORD, "Return"):
+      return parse_return()
     if check(lx.TOKEN_KEYWORD, "On"):
       return parse_on_error()
     if check(lx.TOKEN_KEYWORD, "Resume"):
@@ -271,6 +276,41 @@ proc parse(tokens):
       return parse_set_stmt()
     if check(lx.TOKEN_KEYWORD, "Call"):
       return parse_call_stmt()
+    if check(lx.TOKEN_KEYWORD, "Open"):
+      return parse_open()
+    if check(lx.TOKEN_KEYWORD, "Close"):
+      return parse_close()
+    if check(lx.TOKEN_KEYWORD, "Put"):
+      return parse_put()
+    if check(lx.TOKEN_KEYWORD, "Get"):
+      return parse_get()
+    if check(lx.TOKEN_KEYWORD, "Write"):
+      return parse_write()
+    if check(lx.TOKEN_KEYWORD, "Print"):
+      return parse_print_stmt()
+    if check(lx.TOKEN_KEYWORD, "Input"):
+      return parse_input()
+    if check(lx.TOKEN_KEYWORD, "Line"):
+      return parse_line()
+    if check(lx.TOKEN_KEYWORD, "Circle"):
+      return parse_circle()
+    if check(lx.TOKEN_KEYWORD, "PSet"):
+      return parse_pset()
+    if check(lx.TOKEN_KEYWORD, "Cls"):
+      return parse_cls()
+    if check(lx.TOKEN_KEYWORD, "Load"):
+      return parse_load()
+    if check(lx.TOKEN_KEYWORD, "Unload"):
+      return parse_unload()
+    if check(lx.TOKEN_KEYWORD, "Stop"):
+      return parse_stop()
+    if check(lx.TOKEN_KEYWORD, "Rem"):
+      skip_newlines()
+      return nil
+    if check(lx.TOKEN_KEYWORD):
+      let kw = peek()["value"]
+      if strings.startswith(kw, "Def"):
+        return parse_deftype()
     if check(lx.TOKEN_IDENTIFIER):
       return parse_identifier_stmt()
     if check(lx.TOKEN_NEWLINE):
@@ -515,6 +555,268 @@ proc parse(tokens):
       advance()
       push(names, expect(lx.TOKEN_IDENTIFIER)["value"])
     return ast.EraseStatement(names)
+
+  # --- File I/O ---
+
+  proc parse_open():
+    expect(lx.TOKEN_KEYWORD, "Open")
+    let filepath = parse_expression()
+    let mode = "Input"
+    if check(lx.TOKEN_KEYWORD, "For"):
+      advance()
+      if check(lx.TOKEN_KEYWORD, "Input"):
+        mode = "Input"
+      elif check(lx.TOKEN_KEYWORD, "Output"):
+        mode = "Output"
+      elif check(lx.TOKEN_KEYWORD, "Append"):
+        mode = "Append"
+      elif check(lx.TOKEN_KEYWORD, "Binary"):
+        mode = "Binary"
+      elif check(lx.TOKEN_KEYWORD, "Random"):
+        mode = "Random"
+      if mode == "Input" or mode == "Output" or mode == "Append" or mode == "Binary" or mode == "Random":
+        advance()
+    let access = nil
+    if check(lx.TOKEN_KEYWORD, "Read") or check(lx.TOKEN_KEYWORD, "Write") or check(lx.TOKEN_KEYWORD, "Read Write"):
+      access = advance()["value"]
+    let lock = nil
+    if check(lx.TOKEN_KEYWORD, "Shared") or check(lx.TOKEN_KEYWORD, "Lock Read") or check(lx.TOKEN_KEYWORD, "Lock Write") or check(lx.TOKEN_KEYWORD, "Lock Read Write"):
+      lock = advance()["value"]
+    expect(lx.TOKEN_KEYWORD, "As")
+    if check(lx.TOKEN_OPERATOR, "#"):
+      advance()
+    let filenum = expect(lx.TOKEN_INTEGER)["value"]
+    let reclen = nil
+    if check(lx.TOKEN_IDENTIFIER) and peek()["value"] == "Len":
+      advance()
+      if check(lx.TOKEN_OPERATOR, "="):
+        advance()
+      reclen = parse_expression()
+    return ast.OpenStmt(filepath, mode, filenum, access, lock, reclen)
+
+  proc parse_close():
+    expect(lx.TOKEN_KEYWORD, "Close")
+    let filenums = []
+    if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
+      if check(lx.TOKEN_OPERATOR, "#"):
+        advance()
+      push(filenums, expect(lx.TOKEN_INTEGER)["value"])
+      while check(lx.TOKEN_DELIMITER, ","):
+        advance()
+        if check(lx.TOKEN_OPERATOR, "#"):
+          advance()
+        push(filenums, expect(lx.TOKEN_INTEGER)["value"])
+    return ast.CloseStmt(filenums)
+
+  proc parse_put():
+    expect(lx.TOKEN_KEYWORD, "Put")
+    if check(lx.TOKEN_OPERATOR, "#"):
+      advance()
+    let filenum = expect(lx.TOKEN_INTEGER)["value"]
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+    let recordnum = nil
+    if not check(lx.TOKEN_DELIMITER, ",") and not check(lx.TOKEN_NEWLINE):
+      recordnum = parse_expression()
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+    let variable = parse_expression()
+    return ast.PutStmt(filenum, recordnum, variable)
+
+  proc parse_get():
+    expect(lx.TOKEN_KEYWORD, "Get")
+    if check(lx.TOKEN_OPERATOR, "#"):
+      advance()
+    let filenum = expect(lx.TOKEN_INTEGER)["value"]
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+    let recordnum = nil
+    if not check(lx.TOKEN_DELIMITER, ",") and not check(lx.TOKEN_NEWLINE):
+      recordnum = parse_expression()
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+    let variable = parse_expression()
+    return ast.GetStmt(filenum, recordnum, variable)
+
+  proc parse_write():
+    expect(lx.TOKEN_KEYWORD, "Write")
+    if check(lx.TOKEN_OPERATOR, "#"):
+      advance()
+    let filenum = expect(lx.TOKEN_INTEGER)["value"]
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+    let exprs = []
+    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
+      push(exprs, parse_expression())
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+    return ast.WriteStmt(filenum, exprs)
+
+  proc parse_print_stmt():
+    # Check for file print (Print #filenum, ...) vs console Print
+    if peek(1) != nil and peek(1)["type"] == lx.TOKEN_OPERATOR and peek(1)["value"] == "#":
+      advance()
+      advance()
+      let filenum = expect(lx.TOKEN_INTEGER)["value"]
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+      let exprs = []
+      while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
+        push(exprs, parse_expression())
+        if check(lx.TOKEN_DELIMITER, ","):
+          advance()
+      return ast.PrintStmt(filenum, exprs)
+    # Console Print - treat as CallStatement("Print", args)
+    let tok = advance()
+    let name = tok["value"]
+    let args = []
+    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+      push(args, parse_expression())
+      if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
+        if not check(lx.TOKEN_DELIMITER, ","):
+          break
+    return ast.CallStatement(name, args)
+
+  proc parse_input():
+    if peek(1) != nil and peek(1)["type"] == lx.TOKEN_OPERATOR and peek(1)["value"] == "#":
+      advance()
+      advance()
+      let filenum = expect(lx.TOKEN_INTEGER)["value"]
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+      let variables = []
+      while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
+        push(variables, expect(lx.TOKEN_IDENTIFIER)["value"])
+        if check(lx.TOKEN_DELIMITER, ","):
+          advance()
+      return ast.InputStmt(filenum, variables)
+    # Console Input - treat as CallStatement("Input", args)
+    let tok = advance()
+    let name = tok["value"]
+    let args = []
+    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+      push(args, parse_expression())
+      if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
+        if not check(lx.TOKEN_DELIMITER, ","):
+          break
+    return ast.CallStatement(name, args)
+
+  # --- GoSub / Return ---
+
+  proc parse_gosub():
+    expect(lx.TOKEN_KEYWORD, "GoSub")
+    let label = expect(lx.TOKEN_IDENTIFIER)["value"]
+    return ast.GoSubStmt(label)
+
+  proc parse_return():
+    expect(lx.TOKEN_KEYWORD, "Return")
+    return ast.ReturnStmt()
+
+  # --- Graphics ---
+
+  proc parse_line():
+    expect(lx.TOKEN_KEYWORD, "Line")
+    if check(lx.TOKEN_DELIMITER, "("):
+      advance()
+      let x1 = parse_expression()
+      expect(lx.TOKEN_DELIMITER, ",")
+      let y1 = parse_expression()
+      expect(lx.TOKEN_DELIMITER, ")")
+      expect(lx.TOKEN_OPERATOR, "-")
+      expect(lx.TOKEN_DELIMITER, "(")
+      let x2 = parse_expression()
+      expect(lx.TOKEN_DELIMITER, ",")
+      let y2 = parse_expression()
+      expect(lx.TOKEN_DELIMITER, ")")
+      let color = nil
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+        color = parse_expression()
+      let box = nil
+      if check(lx.TOKEN_KEYWORD, "B"):
+        advance()
+        box = "B"
+      return ast.LineStmt(x1, y1, x2, y2, color, box)
+    # Step method: Line - (x2, y2)
+    let tok = advance()
+    if check(lx.TOKEN_OPERATOR, "-"):
+      advance()
+      expect(lx.TOKEN_DELIMITER, "(")
+      let x2 = parse_expression()
+      expect(lx.TOKEN_DELIMITER, ",")
+      let y2 = parse_expression()
+      expect(lx.TOKEN_DELIMITER, ")")
+      return ast.LineStmt(nil, nil, x2, y2, nil, nil)
+
+  proc parse_circle():
+    expect(lx.TOKEN_KEYWORD, "Circle")
+    expect(lx.TOKEN_DELIMITER, "(")
+    let x = parse_expression()
+    expect(lx.TOKEN_DELIMITER, ",")
+    let y = parse_expression()
+    expect(lx.TOKEN_DELIMITER, ")")
+    expect(lx.TOKEN_DELIMITER, ",")
+    let radius = parse_expression()
+    let color = nil
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+      color = parse_expression()
+    return ast.CircleStmt(x, y, radius, color)
+
+  proc parse_pset():
+    expect(lx.TOKEN_KEYWORD, "PSet")
+    expect(lx.TOKEN_DELIMITER, "(")
+    let x = parse_expression()
+    expect(lx.TOKEN_DELIMITER, ",")
+    let y = parse_expression()
+    expect(lx.TOKEN_DELIMITER, ")")
+    let color = nil
+    if check(lx.TOKEN_DELIMITER, ","):
+      advance()
+      color = parse_expression()
+    return ast.PSetStmt(x, y, color)
+
+  proc parse_cls():
+    expect(lx.TOKEN_KEYWORD, "Cls")
+    return ast.ClsStmt()
+
+  # --- DefType ---
+
+  proc parse_deftype():
+    let type_name = advance()["value"]
+    let ranges = []
+    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
+      let start_letter = expect(lx.TOKEN_IDENTIFIER)["value"]
+      let end_letter = start_letter
+      if check(lx.TOKEN_OPERATOR, "-"):
+        advance()
+        end_letter = expect(lx.TOKEN_IDENTIFIER)["value"]
+      push(ranges, {"start": start_letter, "end": end_letter})
+      if check(lx.TOKEN_DELIMITER, ","):
+        advance()
+    return ast.DefTypeStmt(type_name, ranges)
+
+  # --- Load / Unload ---
+
+  proc parse_load():
+    expect(lx.TOKEN_KEYWORD, "Load")
+    let form_name = expect(lx.TOKEN_IDENTIFIER)["value"]
+    return ast.LoadStmt(form_name)
+
+  proc parse_unload():
+    expect(lx.TOKEN_KEYWORD, "Unload")
+    let form_name = expect(lx.TOKEN_IDENTIFIER)["value"]
+    return ast.UnloadStmt(form_name)
+
+  # --- Stop ---
+
+  proc parse_stop():
+    expect(lx.TOKEN_KEYWORD, "Stop")
+    return ast.StopStmt()
 
   proc parse_set_stmt():
     expect(lx.TOKEN_KEYWORD, "Set")

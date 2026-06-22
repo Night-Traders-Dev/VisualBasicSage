@@ -1,5 +1,7 @@
 # VB4 AST Interpreter - walks the AST and executes VB4 programs
 
+import io
+import strings
 import compiler.ast as ast
 import runtime.builtins as b
 
@@ -86,11 +88,82 @@ class Interpreter:
       "Format": [b.vb_format, 2],
       "Array": [b.vb_array, 1],
       "UBound": [b.vb_ubound, 2],
-      "LBound": [b.vb_lbound, 2]
+      "LBound": [b.vb_lbound, 2],
+      # File I/O
+      "EOF": [b.vb_eof, 1],
+      "LOF": [b.vb_lof, 1],
+      "Loc": [b.vb_loc, 1],
+      "FreeFile": [b.vb_freefile, 0],
+      "FileLen": [b.vb_filelen, 1],
+      "Dir": [b.vb_dir, 1],
+      "CurDir": [b.vb_curdir, 0],
+      "ChDir": [b.vb_chdir, 1],
+      "MkDir": [b.vb_mkdir, 1],
+      "RmDir": [b.vb_rmdir, 1],
+      "Kill": [b.vb_kill, 1],
+      "FileCopy": [b.vb_filecopy, 2],
+      # Date/Time
+      "Date": [b.vb_date, 0],
+      "Time": [b.vb_time, 0],
+      "Timer": [b.vb_timer, 0],
+      "DateSerial": [b.vb_dateserial, 3],
+      "DateValue": [b.vb_datevalue, 1],
+      "TimeSerial": [b.vb_timeserial, 3],
+      "TimeValue": [b.vb_timevalue, 1],
+      "Weekday": [b.vb_weekday, 1],
+      "Month": [b.vb_month, 1],
+      "Year": [b.vb_year, 1],
+      "Day": [b.vb_day, 1],
+      "Hour": [b.vb_hour, 1],
+      "Minute": [b.vb_minute, 1],
+      "Second": [b.vb_second, 1],
+      "MonthName": [b.vb_monthname, 1],
+      "WeekdayName": [b.vb_weekdayname, 1],
+      # String
+      "InStr": [b.vb_instr, 3],
+      "InStrRev": [b.vb_instrrev, 3],
+      "StrReverse": [b.vb_strreverse, 1],
+      "LTrim": [b.vb_ltrim, 1],
+      "RTrim": [b.vb_rtrim, 1],
+      "Space": [b.vb_space, 1],
+      "String": [b.vb_string, 2],
+      "Split": [b.vb_split, 2],
+      "Join": [b.vb_join, 2],
+      "Filter": [b.vb_filter, 3],
+      "StrComp": [b.vb_strcomp, 3],
+      # Math
+      "Exp": [b.vb_exp, 1],
+      "Log": [b.vb_log, 1],
+      "Sqr": [b.vb_sqr, 1],
+      "Round": [b.vb_round, 2],
+      # Conversion
+      "Val": [b.vb_val, 1],
+      "Str": [b.vb_str, 1],
+      "FormatCurrency": [b.vb_formatcurrency, 2],
+      "FormatNumber": [b.vb_formatnumber, 2],
+      "FormatPercent": [b.vb_formatpercent, 2],
+      # Type info
+      "TypeName": [b.vb_typename, 1],
+      "VarType": [b.vb_vartype, 1],
+      "IsArray": [b.vb_isarray, 1],
+      "IsDate": [b.vb_isdate, 1],
+      "IsEmpty": [b.vb_isempty, 1],
+      "IsNull": [b.vb_isnull, 1],
+      "IsObject": [b.vb_isobject, 1],
+      # Other
+      "RGB": [b.vb_rgb, 3],
+      "QBColor": [b.vb_qbcolor, 1],
+      "Choose": [b.vb_choose, -1],
+      "IIf": [b.vb_iif, 3],
+      "Switch": [b.vb_switch, -1]
     }
     self.current_return = nil
     self.current_exit = nil
     self.error_handler = nil
+    self.open_files = {}
+    self.gosub_stack = []
+    self.with_object = nil
+    self.def_types = {}
 
   # Main entry point: execute a Module AST node
   proc execute(self, node):
@@ -176,10 +249,45 @@ class Interpreter:
     if type_ == "RaiseEvent":
       return nil
     if type_ == "RedimStatement":
+      self.exec_redim(node)
       return nil
     if type_ == "EraseStatement":
       for n in node.names:
         self.global_env.set(n, nil)
+      return nil
+    if type_ == "OpenStmt":
+      return self.exec_open(node)
+    if type_ == "CloseStmt":
+      return self.exec_close(node)
+    if type_ == "PutStmt":
+      return self.exec_put(node)
+    if type_ == "GetStmt":
+      return self.exec_get(node)
+    if type_ == "WriteStmt":
+      return self.exec_write(node)
+    if type_ == "PrintStmt":
+      return self.exec_print(node)
+    if type_ == "InputStmt":
+      return self.exec_input(node)
+    if type_ == "GoSubStmt":
+      return self.exec_gosub(node)
+    if type_ == "ReturnStmt":
+      return self.exec_return(node)
+    if type_ == "DefTypeStmt":
+      return self.exec_deftype(node)
+    if type_ == "LoadStmt":
+      return nil
+    if type_ == "UnloadStmt":
+      return nil
+    if type_ == "StopStmt":
+      return nil
+    if type_ == "LineStmt":
+      return nil
+    if type_ == "CircleStmt":
+      return nil
+    if type_ == "PSetStmt":
+      return nil
+    if type_ == "ClsStmt":
       return nil
     return nil
 
@@ -303,6 +411,140 @@ class Interpreter:
             return self.exec_statement(c.body)
     return nil
 
+  # --- File I/O ---
+
+  proc exec_open(self, node):
+    let filepath = str(self.eval_expression(node.filepath))
+    let filenum = str(tonumber(str(node.filenum)))
+    let mode = node.mode
+    if mode == "Output":
+      io.writefile(filepath, "")
+      self.open_files[filenum] = {"path": filepath, "mode": "Output", "content": ""}
+    elif mode == "Append":
+      let existing = io.readfile(filepath)
+      if existing == nil:
+        existing = ""
+      self.open_files[filenum] = {"path": filepath, "mode": "Append", "content": existing}
+    elif mode == "Binary":
+      let content = io.readfile(filepath)
+      if content == nil:
+        content = ""
+      self.open_files[filenum] = {"path": filepath, "mode": "Binary", "content": content, "pos": 0}
+    else:
+      let content = io.readfile(filepath)
+      if content == nil:
+        content = ""
+      self.open_files[filenum] = {"path": filepath, "mode": "Input", "content": content, "pos": 0}
+    return nil
+
+  proc exec_close(self, node):
+    if len(node.filenums) == 0:
+      for fn in dict_keys(self.open_files):
+        let f = self.open_files[fn]
+        if type(f) == "dict" and dict_has(f, "content"):
+          io.writefile(f["path"], f["content"])
+        self.open_files[fn] = nil
+      self.open_files = {}
+    else:
+      for fn in node.filenums:
+        let fnum = str(tonumber(str(fn)))
+        if dict_has(self.open_files, fnum):
+          let f = self.open_files[fnum]
+          if type(f) == "dict" and dict_has(f, "content"):
+            io.writefile(f["path"], f["content"])
+          self.open_files[fnum] = nil
+    return nil
+
+  proc exec_put(self, node):
+    let filenum = str(tonumber(str(node.filenum)))
+    let val = self.eval_expression(node.variable)
+    if not dict_has(self.open_files, filenum):
+      return nil
+    let f = self.open_files[filenum]
+    f["content"] = f["content"] + str(val)
+    return nil
+
+  proc exec_get(self, node):
+    let filenum = str(tonumber(str(node.filenum)))
+    if not dict_has(self.open_files, filenum):
+      return nil
+    let f = self.open_files[filenum]
+    let result = f["content"]
+    if node.variable != nil:
+      let target = node.variable
+      if self.get_type(target) == "Identifier":
+        self.global_env.set(target.name, result)
+    return result
+
+  proc exec_write(self, node):
+    let filenum = str(tonumber(str(node.filenum)))
+    if not dict_has(self.open_files, filenum):
+      return nil
+    let f = self.open_files[filenum]
+    let parts = []
+    for e in node.exprs:
+      push(parts, str(self.eval_expression(e)))
+    let line_str = strings.join(parts, ",") + "\n"
+    f["content"] = f["content"] + line_str
+    return nil
+
+  proc exec_print(self, node):
+    let filenum = str(tonumber(str(node.filenum)))
+    if not dict_has(self.open_files, filenum):
+      return nil
+    let f = self.open_files[filenum]
+    let parts = []
+    for e in node.exprs:
+      push(parts, str(self.eval_expression(e)))
+    let line_str = strings.join(parts, " ") + "\n"
+    f["content"] = f["content"] + line_str
+    return nil
+
+  proc exec_input(self, node):
+    let filenum = str(tonumber(str(node.filenum)))
+    if not dict_has(self.open_files, filenum):
+      return nil
+    let f = self.open_files[filenum]
+    let content = f["content"]
+    if not dict_has(f, "pos"):
+      f["pos"] = 0
+    let pos = f["pos"]
+    for var_name in node.variables:
+      let comma_idx = strings.indexof(content, ",")
+      let newline_idx = strings.indexof(content, "\n")
+      let end_idx = -1
+      if comma_idx >= 0 and comma_idx >= pos:
+        end_idx = comma_idx
+      if newline_idx >= 0 and newline_idx >= pos and (end_idx < 0 or newline_idx < end_idx):
+        end_idx = newline_idx
+      if end_idx < 0 or end_idx < pos:
+        end_idx = len(content)
+      let val_str = strings.strip(content[pos:end_idx])
+      self.global_env.set(var_name, val_str)
+      pos = end_idx + 1
+    f["pos"] = pos
+    return nil
+
+  # --- GoSub / Return ---
+
+  proc exec_gosub(self, node):
+    push(self.gosub_stack, {"return_pos": nil})
+    return nil
+
+  proc exec_return(self, node):
+    if len(self.gosub_stack) > 0:
+      pop(self.gosub_stack)
+    return nil
+
+  # --- DefType ---
+
+  proc exec_deftype(self, node):
+    for r in node.letter_ranges:
+      self.def_types[r["start"]] = node.type_name
+      if r["end"] != r["start"]:
+        self.def_types[r["end"]] = node.type_name
+    return nil
+
   proc exec_for(self, node):
     let start = tonumber(str(self.eval_expression(node.start)))
     let end = tonumber(str(self.eval_expression(node.end)))
@@ -337,6 +579,19 @@ class Interpreter:
       self.global_env.set(node.variable, item)
       self.exec_statement(node.body)
 
+  proc exec_redim(self, node):
+    let dims = []
+    for d in node.dimensions:
+      push(dims, tonumber(str(self.eval_expression(d))))
+    let size = 1
+    for d in dims:
+      size = size * d
+    let arr = []
+    for i in range(size):
+      push(arr, nil)
+    self.global_env.set(node.name, arr)
+    return nil
+
   proc exec_do(self, node):
     if node.loop_type == "while":
       while true:
@@ -368,8 +623,10 @@ class Interpreter:
       self.exec_statement(node.body)
 
   proc exec_with(self, node):
-    # TODO: implement With block
+    let saved = self.with_object
+    self.with_object = self.eval_expression(node.object)
     self.exec_statement(node.body)
+    self.with_object = saved
 
   # --- Expression evaluation ---
 
@@ -475,7 +732,13 @@ class Interpreter:
   proc eval_member_access(self, node):
     let obj = self.eval_expression(node.object)
     if obj != nil:
+      if type(obj) == "instance":
+        return obj[node.member]
       return obj[node.member]
+    if self.with_object != nil:
+      if type(self.with_object) == "instance":
+        return self.with_object[node.member]
+      return self.with_object[node.member]
     return nil
 
   # --- Helpers ---

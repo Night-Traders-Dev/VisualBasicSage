@@ -1,5 +1,7 @@
 # BAS Parser - parses Visual Basic Module (.bas) files
 
+import io
+
 ## Parse a .bas module file
 proc parse_bas(path):
   let content = io.readfile(path)

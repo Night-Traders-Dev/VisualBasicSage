@@ -1,5 +1,6 @@
 # File format compatibility tests (.vbp, .frm, .bas, .cls)
 
+import io
 import compatibility.vbp as vbp
 import compatibility.frm as frm
 import compatibility.bas as bas

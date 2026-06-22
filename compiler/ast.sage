@@ -267,3 +267,122 @@ class NothingExpr(Node):
 class MeExpr(Node):
   proc init(self):
     super.init("MeExpr")
+
+# --- File I/O ---
+
+class OpenStmt(Node):
+  proc init(self, filepath, mode, filenum, access=nil, lock=nil, reclen=nil):
+    super.init("OpenStmt")
+    self.filepath = filepath
+    self.mode = mode
+    self.filenum = filenum
+    self.access = access
+    self.lock = lock
+    self.reclen = reclen
+
+class CloseStmt(Node):
+  proc init(self, filenums):
+    super.init("CloseStmt")
+    self.filenums = filenums
+
+class PutStmt(Node):
+  proc init(self, filenum, recordnum, variable):
+    super.init("PutStmt")
+    self.filenum = filenum
+    self.recordnum = recordnum
+    self.variable = variable
+
+class GetStmt(Node):
+  proc init(self, filenum, recordnum, variable):
+    super.init("GetStmt")
+    self.filenum = filenum
+    self.recordnum = recordnum
+    self.variable = variable
+
+class WriteStmt(Node):
+  proc init(self, filenum, exprs):
+    super.init("WriteStmt")
+    self.filenum = filenum
+    self.exprs = exprs
+
+class PrintStmt(Node):
+  proc init(self, filenum, exprs):
+    super.init("PrintStmt")
+    self.filenum = filenum
+    self.exprs = exprs
+
+class InputStmt(Node):
+  proc init(self, filenum, variables):
+    super.init("InputStmt")
+    self.filenum = filenum
+    self.variables = variables
+
+class LineInputStmt(Node):
+  proc init(self, filenum, variable):
+    super.init("LineInputStmt")
+    self.filenum = filenum
+    self.variable = variable
+
+# --- GoSub / Return ---
+
+class GoSubStmt(Node):
+  proc init(self, label):
+    super.init("GoSubStmt")
+    self.label = label
+
+class ReturnStmt(Node):
+  proc init(self):
+    super.init("ReturnStmt")
+
+# --- Graphics ---
+
+class LineStmt(Node):
+  proc init(self, x1, y1, x2, y2, color=nil, box=nil):
+    super.init("LineStmt")
+    self.x1 = x1
+    self.y1 = y1
+    self.x2 = x2
+    self.y2 = y2
+    self.color = color
+    self.box = box
+
+class CircleStmt(Node):
+  proc init(self, x, y, radius, color=nil):
+    super.init("CircleStmt")
+    self.x = x
+    self.y = y
+    self.radius = radius
+    self.color = color
+
+class PSetStmt(Node):
+  proc init(self, x, y, color=nil):
+    super.init("PSetStmt")
+    self.x = x
+    self.y = y
+    self.color = color
+
+class ClsStmt(Node):
+  proc init(self):
+    super.init("ClsStmt")
+
+# --- Other ---
+
+class DefTypeStmt(Node):
+  proc init(self, type_name, letter_ranges):
+    super.init("DefTypeStmt")
+    self.type_name = type_name
+    self.letter_ranges = letter_ranges
+
+class LoadStmt(Node):
+  proc init(self, form_name):
+    super.init("LoadStmt")
+    self.form_name = form_name
+
+class UnloadStmt(Node):
+  proc init(self, form_name):
+    super.init("UnloadStmt")
+    self.form_name = form_name
+
+class StopStmt(Node):
+  proc init(self):
+    super.init("StopStmt")

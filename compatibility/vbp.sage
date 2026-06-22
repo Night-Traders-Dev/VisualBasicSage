@@ -1,5 +1,6 @@
 # VBP Parser - parses Visual Basic Project (.vbp) files
 
+import io
 import strings
 
 ## Parse a .vbp project file into a project structure

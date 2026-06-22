@@ -1,5 +1,6 @@
 # FRM Parser - parses Visual Basic Form (.frm) files
 
+import io
 import strings
 
 ## Parse a .frm form file into a form structure
@@ -69,7 +70,8 @@ proc parse_frm(path):
         elif prop_name == "Caption":
           form["caption"] = prop_value
 
-  form["name"] = strings.strip(form["properties"]["Name"])
+  if dict_has(form["properties"], "Name"):
+    form["name"] = strings.strip(form["properties"]["Name"])
 
   return form
 
