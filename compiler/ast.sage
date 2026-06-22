@@ -133,6 +133,12 @@ class CaseClause(Node):
     self.values = values
     self.body = body
 
+class RangeClause(Node):
+  proc init(self, low, high):
+    super.init("RangeClause")
+    self.low = low
+    self.high = high
+
 class ForLoop(Node):
   proc init(self, variable, start, end, step, body):
     super.init("ForLoop")

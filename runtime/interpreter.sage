@@ -291,9 +291,16 @@ class Interpreter:
         # Catch-all (Case Else)
         return self.exec_statement(c.body)
       for val_node in c.values:
-        let case_val = self.eval_expression(val_node)
-        if expr == case_val:
-          return self.exec_statement(c.body)
+        if self.get_type(val_node) == "RangeClause":
+          let low = tonumber(str(self.eval_expression(val_node.low)))
+          let high = tonumber(str(self.eval_expression(val_node.high)))
+          let val = tonumber(str(expr))
+          if val >= low and val <= high:
+            return self.exec_statement(c.body)
+        else:
+          let case_val = self.eval_expression(val_node)
+          if expr == case_val:
+            return self.exec_statement(c.body)
     return nil
 
   proc exec_for(self, node):

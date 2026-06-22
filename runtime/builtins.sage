@@ -14,6 +14,10 @@ proc vb_msgbox(prompt, buttons=0, title=""):
 
 ## InputBox: get user input
 proc vb_inputbox(prompt, title="", default_val=""):
+  if title == "":
+    print "Input: " + str(prompt)
+  else:
+    print "[" + str(title) + "] Input: " + str(prompt)
   return input()
 
 ## Len: string or array length

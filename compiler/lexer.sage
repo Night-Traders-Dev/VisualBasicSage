@@ -32,6 +32,7 @@ let KEYWORDS = [
   "Friend", "Global",
   "Option", "Explicit", "Base", "Compare",
   "On", "Error", "GoTo", "Resume",
+  "As", "To",
   "With", "End With",
   "Event", "RaiseEvent",
   "Implements"

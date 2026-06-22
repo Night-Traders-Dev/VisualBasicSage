@@ -286,7 +286,10 @@ proc parse(tokens):
       let as_type = nil
       if check(lx.TOKEN_KEYWORD, "As"):
         advance()
-        as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
+        if check(lx.TOKEN_IDENTIFIER):
+          as_type = advance()["value"]
+        elif check(lx.TOKEN_KEYWORD):
+          as_type = advance()["value"]
       push(vars, ast.VariableDecl(name, as_type))
       if not check(lx.TOKEN_DELIMITER, ","):
         break
@@ -299,7 +302,10 @@ proc parse(tokens):
     let as_type = nil
     if check(lx.TOKEN_KEYWORD, "As"):
       advance()
-      as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
+      if check(lx.TOKEN_IDENTIFIER):
+        as_type = advance()["value"]
+      elif check(lx.TOKEN_KEYWORD):
+        as_type = advance()["value"]
     expect(lx.TOKEN_OPERATOR, "=")
     let value = parse_expression()
     return ast.ConstDecl(name, as_type, value)
@@ -308,6 +314,17 @@ proc parse(tokens):
     expect(lx.TOKEN_KEYWORD, "If")
     let condition = parse_expression()
     expect(lx.TOKEN_KEYWORD, "Then")
+
+    # Check if single-line If (next token is not a newline)
+    if not check(lx.TOKEN_NEWLINE):
+      # Single-line If: parse one statement as the body
+      let stmts = []
+      push(stmts, parse_statement())
+      let then_body = ast.Block(stmts)
+      # No Else or End If for single-line
+      return ast.IfStatement(condition, then_body, [], nil)
+
+    # Block If
     skip_newlines()
     let then_body = parse_block(["Else", "ElseIf", "End", "End If"])
     let else_if_clauses = []
@@ -344,7 +361,14 @@ proc parse(tokens):
         # values stays empty to indicate catch-all
       else:
         while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-          push(values, parse_expression())
+          let val = parse_expression()
+          # Handle "To" range operator in case values
+          if check(lx.TOKEN_KEYWORD, "To"):
+            advance()
+            let range_end = parse_expression()
+            push(values, ast.RangeClause(val, range_end))
+          else:
+            push(values, val)
           if check(lx.TOKEN_DELIMITER, ","):
             advance()
       skip_newlines()
