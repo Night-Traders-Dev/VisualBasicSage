@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""
+sagemake — Build system for VisualBasicSage
+
+VB4-compatible IDE and runtime written in SageLang
+
+Usage:
+    ./sagemake [command] [flags]
+
+Commands:
+    build      Compile VB4 IDE to standalone binary (via sage --aot)
+    test       Run the test suite
+    install    Install built artifacts
+    run        Run the VB4 IDE via interpreter
+    clean      Remove build artifacts
+    all        Run build then test
+"""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# ANSI helpers
+
+RESET = "\033[0m"
+BOLD = "\033[1m"
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+CYAN = "\033[36m"
+
+
+def banner(title: str) -> None:
+    width = 60
+    line = f"{CYAN}{'═' * width}{RESET}"
+    print(f"\n{line}")
+    print(f"{CYAN}  {BOLD}{title}{RESET}")
+    print(f"{line}\n")
+
+
+def section(title: str) -> None:
+    print(f"  {CYAN}→{RESET} {title}")
+
+
+def step(msg: str) -> None:
+    print(f"    {msg} ... ", end="", flush=True)
+
+
+def ok() -> None:
+    print(f"{GREEN}✓ done{RESET}")
+
+
+def fail() -> None:
+    print(f"{RED}✗ failed{RESET}")
+    sys.exit(1)
+
+
+def step_ok(detail: str) -> None:
+    print(f"{GREEN}✓ {detail}{RESET}")
+
+
+def step_fail(detail: str) -> None:
+    print(f"{RED}✗ {detail}{RESET}")
+    sys.exit(1)
+
+
+def step_warn(detail: str) -> None:
+    print(f"{YELLOW}! {detail}{RESET}")
+
+
+def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(cmd, check=False, **kwargs)
+    except FileNotFoundError:
+        step_fail(f"command not found: {cmd[0]}")
+
+
+# Configuration
+
+ROOT = Path(__file__).resolve().parent
+BUILD_DIR = ROOT / "build"
+BINARY_NAME = "vb4ide"
+
+
+# Commands
+
+def cmd_build(args: list[str]) -> None:
+    banner("build — VisualBasicSage")
+    check_dependencies()
+
+    BUILD_DIR.mkdir(parents=True, exist_ok=True)
+
+    section("Compilation")
+    step("compiling via sage --aot")
+    result = run([
+        "sage", "--aot", "main.sage",
+        "-o", str(BUILD_DIR / BINARY_NAME)
+    ], capture_output=True, text=True)
+    binary = BUILD_DIR / BINARY_NAME
+    if result.returncode == 0 and binary.exists():
+        step_ok(f"built {BINARY_NAME} ({binary.stat().st_size} bytes)")
+    else:
+        step_warn("--aot compilation has known limitations with module-level")
+        step_warn("variable bindings — falling back to interpreter-only build")
+        if result.stderr:
+            for line in result.stderr.strip().split("\n"):
+                step_warn(f"  {line.strip()}")
+
+    step("copying runtime dependencies")
+    runtime_dir = BUILD_DIR / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    for f in (ROOT / "runtime").rglob("*.sage"):
+        target = runtime_dir / f.relative_to(ROOT / "runtime")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(f.read_text())
+    for d in ["compiler", "ide", "compatibility", "designer", "tests"]:
+        src = ROOT / d
+        if src.exists():
+            for f in src.rglob("*.sage"):
+                target = BUILD_DIR / f.relative_to(ROOT)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(f.read_text())
+    (BUILD_DIR / "main.sage").write_text((ROOT / "main.sage").read_text())
+    step_ok("runtime files copied")
+
+    step_ok("build complete — use ./sagemake run or ./sagemake install")
+
+
+def cmd_test(args: list[str]) -> None:
+    banner("test — VisualBasicSage")
+    section("Running test suite")
+    test_dir = ROOT / "tests"
+    passed = 0
+    failed = 0
+    for f in sorted(test_dir.glob("test_*.sage")):
+        step(f"{f.name}")
+        result = run(["sage", str(f)], capture_output=True, text=True)
+        if result.returncode == 0:
+            ok()
+            passed += 1
+        else:
+            print(f"{RED}✗ failed{RESET}")
+            print(result.stderr or result.stdout)
+            failed += 1
+    print(f"\n  {GREEN if failed == 0 else RED}{passed} passed, {failed} failed{RESET}")
+    if failed:
+        sys.exit(1)
+
+
+def cmd_install(args: list[str]) -> None:
+    banner("install — VisualBasicSage")
+    target = Path("/usr/local/bin") / BINARY_NAME
+    step(f"installing to {target}")
+    if not (BUILD_DIR / BINARY_NAME).exists():
+        # Install main.sage as a launcher script
+        step_warn("binary not built — installing interpreter entry point")
+        launcher = ROOT / "main.sage"
+        run(["sudo", "cp", str(launcher), str(target)])
+        run(["sudo", "chmod", "755", str(target)])
+    else:
+        run(["sudo", "cp", str(BUILD_DIR / BINARY_NAME), str(target)])
+        run(["sudo", "chmod", "755", str(target)])
+    step_ok(f"installed {BINARY_NAME}")
+
+
+def cmd_run(args: list[str]) -> None:
+    banner("run — VisualBasicSage")
+    section("Launching VB4 IDE")
+    result = run(["sage", "main.sage"] + args)
+    if result.returncode != 0:
+        step_fail(f"exit code {result.returncode}")
+
+
+def cmd_clean(args: list[str]) -> None:
+    banner("clean — VisualBasicSage")
+    section("Removing build artifacts")
+    if BUILD_DIR.exists():
+        step(f"removing {BUILD_DIR}")
+        run(["rm", "-rf", str(BUILD_DIR)])
+        ok()
+    else:
+        step_ok("nothing to clean")
+
+
+def cmd_all(args: list[str]) -> None:
+    cmd_build(args)
+    cmd_test(args)
+
+
+# Dependency check
+
+def check_dependencies() -> None:
+    section("Dependencies")
+    required = ["sage", "gcc"]
+    for dep in required:
+        step(f"checking {dep}")
+        if run(["which", dep], capture_output=True).returncode != 0:
+            step_fail(f"{dep} not found")
+        ok()
+
+
+# CLI dispatch
+
+def main() -> None:
+    commands: dict[str, callable] = {
+        "build": cmd_build,
+        "test": cmd_test,
+        "install": cmd_install,
+        "run": cmd_run,
+        "clean": cmd_clean,
+        "all": cmd_all,
+    }
+
+    if len(sys.argv) < 2 or sys.argv[1] not in commands:
+        banner("VisualBasicSage — sagemake")
+        print(f"  Usage:  ./sagemake {'|'.join(commands.keys())}")
+        print()
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+    args = sys.argv[2:]
+    commands[cmd](args)
+
+
+if __name__ == "__main__":
+    main()

@@ -71,7 +71,7 @@ class ListBox(Control):
 
   proc remove_item(self, index):
     # TODO: implement removal
-    pass
+    return nil
 
 class ComboBox(Control):
   proc init(self, name):

@@ -129,7 +129,7 @@ VisualBasicSage/
 ├── designer/          # Surface, Toolbox
 ├── compatibility/     # VBP, FRM, BAS, CLS parsers
 ├── samples/           # Example programs (calculator)
-├── tests/             # 104 tests across 11 modules
+├── tests/             # 149 tests across 12 modules
 └── docs/              # Documentation
 
 ---
@@ -174,6 +174,13 @@ Step-into/over/out, breakpoints by file+line, call stack, variable inspection, e
 - 21 new tests for Phase 9 features
 - Pre-existing bugs fixed: missing `import io` in all compatibility modules, frm.sage name extraction, `#` token handling for file numbers
 
+### Phase 10 — Financial, Error Handling, Expanded Builtins
+- Financial functions: FV, PV, PMT, NPV, SLN, SYD, DDB (time-value-of-money + depreciation)
+- Line Input statement with correct newline seeking from current position
+- On Error Resume Next / On Error GoTo 0 parsing with `Next` consumption and numeric label support
+- Existing tests pass. Keyword tokens now accepted in expression/statement positions for VB4 builtins sharing keyword names (String, Boolean, etc.)
+- 45 new tests for Phase 10 features
+
 ---
 
 ## VB4 Coverage (~75%)
@@ -203,14 +210,14 @@ Step-into/over/out, breakpoints by file+line, call stack, variable inspection, e
 | IDE | 60% | Editor, project, properties, shell |
 | Debugger | 70% | Step, breakpoints, call stack |
 | File Format (.vbp/.frm/.bas/.cls) | 90% | Parse and round-trip |
-| Financial functions (FV, PV, NPV, etc.) | 0% | Not implemented |
+| Financial functions (FV, PV, NPV, etc.) | 80% | FV, PV, PMT, NPV, SLN, SYD, DDB implemented |
 | OLE / DDE | 0% | Not implemented |
 | Control arrays | 0% | Not implemented |
 | Line numbers | 0% | Not implemented |
 
 ---
 
-## Test Suite (104 tests, 11 modules)
+## Test Suite (149 tests, 12 modules)
 
 | Module | Tests | Status |
 |---|---|---|
@@ -225,6 +232,7 @@ Step-into/over/out, breakpoints by file+line, call stack, variable inspection, e
 | test_debugger | 7 | Passing |
 | test_compat_files | 5 | Passing |
 | test_phase9 | 21 | Passing |
+| test_phase10 | 45 | Passing |
 
 ---
 

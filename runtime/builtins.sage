@@ -10,13 +10,13 @@ proc vb_print(items):
     print str(item)
 
 ## MsgBox: show a message
-proc vb_msgbox(prompt, buttons=0, title=""):
+proc vb_msgbox(prompt, buttons, title):
   print "[MsgBox] " + str(prompt)
   # TODO: native dialog when windowing system is ready
 
 ## InputBox: get user input
-proc vb_inputbox(prompt, title="", default_val=""):
-  if title == "":
+proc vb_inputbox(prompt, title, default_val):
+  if title == nil or title == "":
     print "Input: " + str(prompt)
   else:
     print "[" + str(title) + "] Input: " + str(prompt)
@@ -97,15 +97,6 @@ proc vb_rnd():
 proc vb_randomize(seed):
   math.random(seed)
 
-## Now: current date/time
-proc vb_now():
-  return str(clock())
-
-## IsNumeric: check if string is numeric
-proc vb_isnumeric(s):
-  let n = tonumber(s)
-  return n != nil
-
 ## CStr: convert to string
 proc vb_cstr(v):
   return str(v)
@@ -129,14 +120,6 @@ proc vb_cdbl(v):
 ## CBool: convert to boolean
 proc vb_cbool(v):
   return v != 0
-
-## Hex: to hex string
-proc vb_hex(n):
-  return str(n)  # TODO: proper hex formatting
-
-## Oct: to octal string
-proc vb_oct(n):
-  return str(n)  # TODO: proper octal formatting
 
 ## Format: format number
 proc vb_format(expr, fmt=""):
@@ -192,23 +175,23 @@ proc vb_curdir(drive=""):
 
 ## ChDir: change directory
 proc vb_chdir(path):
-  pass
+  return nil
 
 ## MkDir: create directory
 proc vb_mkdir(path):
-  pass
+  return nil
 
 ## RmDir: remove directory
 proc vb_rmdir(path):
-  pass
+  return nil
 
 ## Kill: delete file
 proc vb_kill(path):
-  pass
+  return nil
 
 ## FileCopy: copy file
 proc vb_filecopy(source, dest):
-  pass
+  return nil
 
 # === Date/Time Functions ===
 
@@ -547,3 +530,154 @@ proc vb_switch(args):
     if args[i]:
       return args[i + 1]
   return nil
+
+# === System Functions ===
+
+## DoEvents: yield to OS
+proc vb_doevents():
+  return 0
+
+## Beep: system beep
+proc vb_beep():
+  return nil
+
+## Environ: environment variable
+let _vb_environ_cache = nil
+proc vb_environ(v):
+  if _vb_environ_cache == nil:
+    _vb_environ_cache = {}
+    let raw = io.readfile("/proc/self/environ")
+    if raw != nil:
+      let entries = strings.split(raw, "\0")
+      for entry in entries:
+        let eq_pos = strings.indexof(entry, "=")
+        if eq_pos >= 0:
+          _vb_environ_cache[entry[:eq_pos]] = entry[eq_pos + 1:]
+  if type(v) == "number":
+    return ""
+  let name = str(v)
+  if dict_has(_vb_environ_cache, name):
+    return _vb_environ_cache[name]
+  return ""
+
+## Command: command line arguments
+proc vb_command():
+  return ""
+
+## IMEStatus: IME status (stub)
+proc vb_imestatus():
+  return 0
+
+## Calendar: calendar type (stub)
+proc vb_calendar():
+  return 0
+
+## GetSetting: registry value (stub)
+proc vb_getsetting(appname, section, key, default_val=""):
+  return default_val
+
+## GetAllSettings: all registry values (stub)
+proc vb_getallsettings(appname, section):
+  return []
+
+## SaveSetting: save registry value (stub)
+proc vb_savesetting(appname, section, key, setting_val):
+  return nil
+
+## DeleteSetting: delete registry value (stub)
+proc vb_deletesetting(appname, section, key_val=""):
+  return nil
+
+# === Financial Functions ===
+
+## FV: Future Value
+proc vb_fv(rate, nper, pmt, pv=0, ptype=0):
+  if rate == 0:
+    return -(pv + pmt * nper)
+  let r = rate
+  let n = nper
+  let fv = -(pv * math.pow(1 + r, n) + pmt * (1 + r * ptype) * ((math.pow(1 + r, n) - 1) / r))
+  return fv
+
+## PV: Present Value
+proc vb_pv(rate, nper, pmt, fv=0, ptype=0):
+  if rate == 0:
+    return -(fv + pmt * nper)
+  let r = rate
+  let n = nper
+  let pv = -(fv * math.pow(1 + r, -n) + pmt * (1 + r * ptype) * ((1 - math.pow(1 + r, -n)) / r))
+  return pv
+
+## NPV: Net Present Value
+proc vb_npv(rate, values):
+  let r = rate
+  let npv = 0
+  for i in range(len(values)):
+    npv = npv + values[i] / math.pow(1 + r, i + 1)
+  return npv
+
+## PMT: Payment
+proc vb_pmt(rate, nper, pv, fv=0, ptype=0):
+  if rate == 0:
+    return -(pv + fv) / nper
+  let r = rate
+  let n = nper
+  let pmt = -(pv * math.pow(1 + r, n) + fv) / ((1 + r * ptype) * ((math.pow(1 + r, n) - 1) / r))
+  return pmt
+
+## PPMT: Principal Payment
+proc vb_ppmt(rate, per, nper, pv, fv=0, ptype=0):
+  let pmt = vb_pmt(rate, nper, pv, fv, ptype)
+  let ipmt = vb_ipmt(rate, per, nper, pv, fv, ptype)
+  return pmt - ipmt
+
+## IPMT: Interest Payment
+proc vb_ipmt(rate, per, nper, pv, fv=0, ptype=0):
+  let r = rate
+  let n = nper
+  let p = per
+  if r == 0:
+    return 0
+  let fv_factor = 1
+  if ptype == 1:
+    fv_factor = 1 + r
+  let pmt = vb_pmt(r, n, pv, fv, ptype)
+  let interest = 0
+  if p == 1:
+    interest = -pv * r
+  else:
+    interest = -(pv * math.pow(1 + r, p - 1) + pmt * (1 + r * ptype) * ((math.pow(1 + r, p - 1) - 1) / r)) * r
+  return interest
+
+## Rate: Interest Rate per period
+proc vb_rate(nper, pmt, pv, fv=0, ptype=0, guess=0.1):
+  return guess
+
+## NPer: Number of Periods
+proc vb_nper(rate, pmt, pv, fv=0, ptype=0):
+  if rate == 0:
+    return -(pv + fv) / pmt
+  let r = rate
+  return math.log((pmt * (1 + r * ptype) / r - fv) / (pmt * (1 + r * ptype) / r + pv)) / math.log(1 + r)
+
+## SLN: Straight-Line Depreciation
+proc vb_sln(cost, salvage, life):
+  return (cost - salvage) / life
+
+## SYD: Sum-of-Years Digits Depreciation
+proc vb_syd(cost, salvage, life, period):
+  return ((cost - salvage) * (life - period + 1) * 2) / (life * (life + 1))
+
+## DDB: Double-Declining Balance Depreciation
+proc vb_ddb(cost, salvage, life, period, factor=2):
+  let book_value = cost
+  for p in range(1, period + 1):
+    let depr1 = book_value - salvage
+    let depr2 = book_value * factor / life
+    let depreciation = depr1
+    if depr2 < depr1:
+      depreciation = depr2
+    if p == period:
+      return depreciation
+    book_value = book_value - depreciation
+  return 0

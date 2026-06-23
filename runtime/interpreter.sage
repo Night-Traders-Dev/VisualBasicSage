@@ -150,6 +150,29 @@ class Interpreter:
       "IsEmpty": [b.vb_isempty, 1],
       "IsNull": [b.vb_isnull, 1],
       "IsObject": [b.vb_isobject, 1],
+      # System
+      "DoEvents": [b.vb_doevents, 0],
+      "Beep": [b.vb_beep, 0],
+      "Environ": [b.vb_environ, 1],
+      "Command": [b.vb_command, 0],
+      "IMEStatus": [b.vb_imestatus, 0],
+      "Calendar": [b.vb_calendar, 0],
+      "GetSetting": [b.vb_getsetting, 4],
+      "GetAllSettings": [b.vb_getallsettings, 2],
+      "SaveSetting": [b.vb_savesetting, 4],
+      "DeleteSetting": [b.vb_deletesetting, 3],
+      # Financial
+      "FV": [b.vb_fv, 5],
+      "PV": [b.vb_pv, 5],
+      "NPV": [b.vb_npv, 2],
+      "PMT": [b.vb_pmt, 5],
+      "PPMT": [b.vb_ppmt, 6],
+      "IPMT": [b.vb_ipmt, 6],
+      "Rate": [b.vb_rate, 6],
+      "NPer": [b.vb_nper, 5],
+      "SLN": [b.vb_sln, 3],
+      "SYD": [b.vb_syd, 4],
+      "DDB": [b.vb_ddb, 5],
       # Other
       "RGB": [b.vb_rgb, 3],
       "QBColor": [b.vb_qbcolor, 1],
@@ -160,10 +183,17 @@ class Interpreter:
     self.current_return = nil
     self.current_exit = nil
     self.error_handler = nil
+    self.error_raised = false
+    self.error_number = 0
+    self.error_description = ""
+    self.err_object = nil
     self.open_files = {}
     self.gosub_stack = []
     self.with_object = nil
     self.def_types = {}
+    self.labels = {}
+    self.current_procedure_labels = {}
+    self.error_resume_next = false
 
   # Main entry point: execute a Module AST node
   proc execute(self, node):
@@ -233,8 +263,11 @@ class Interpreter:
       self.current_exit = node.kind
       return nil
     if type_ == "GoToStatement":
-      # TODO: implement GoTo
-      return nil
+      return self.exec_goto(node)
+    if type_ == "OnError":
+      return self.exec_on_error(node)
+    if type_ == "Resume":
+      return self.exec_resume(node)
     if type_ == "VariableDecl":
       # Dim statement - register variable
       if node.type_name != nil:
@@ -281,6 +314,10 @@ class Interpreter:
       return nil
     if type_ == "StopStmt":
       return nil
+    if type_ == "LabelDef":
+      return nil
+    if type_ == "LineInputStmt":
+      return self.exec_line_input(node)
     if type_ == "LineStmt":
       return nil
     if type_ == "CircleStmt":
@@ -294,8 +331,14 @@ class Interpreter:
   proc exec_block(self, node):
     let local_env = Environment(self.global_env)
     for stmt in node.statements:
+      if self.jump_to_label != nil and self.jump_to_label != "":
+        if self.get_type(stmt) == "LabelDef" and stmt.name == self.jump_to_label:
+          self.jump_to_label = nil
+        continue
       if self.current_exit != nil:
         break
+      if self.get_type(stmt) == "LabelDef":
+        continue
       self.exec_statement(stmt)
     return nil
 
@@ -304,25 +347,240 @@ class Interpreter:
     let target = node.target
     if self.get_type(target) == "MemberAccess":
       # TODO: set property on object
-      pass
+      return nil
     elif self.get_type(target) == "Identifier":
       self.global_env.set(target.name, val)
     return val
 
-  proc call_builtin(self, fn_info, args):
-    let fn = fn_info[0]
-    let arity = fn_info[1]
-    if arity == -1:
-      return fn(args)
-    if arity == 0:
-      return fn()
-    if arity == 1:
-      return fn(args[0])
-    if arity == 2:
-      return fn(args[0], args[1])
-    if arity == 3:
-      return fn(args[0], args[1], args[2])
-    return fn()
+  proc dispatch_builtin(self, name, args):
+    if name == "Print":
+      return b.vb_print(args)
+    elif name == "MsgBox":
+      return b.vb_msgbox(args[0], args[1], args[2])
+    elif name == "InputBox":
+      return b.vb_inputbox(args[0], args[1], args[2])
+    elif name == "Len":
+      return b.vb_len(args[0])
+    elif name == "Asc":
+      return b.vb_asc(args[0])
+    elif name == "Chr":
+      return b.vb_chr(args[0])
+    elif name == "Left":
+      return b.vb_left(args[0], args[1])
+    elif name == "Right":
+      return b.vb_right(args[0], args[1])
+    elif name == "Mid":
+      return b.vb_mid(args[0], args[1], args[2])
+    elif name == "UCase":
+      return b.vb_ucase(args[0])
+    elif name == "LCase":
+      return b.vb_lcase(args[0])
+    elif name == "Trim":
+      return b.vb_trim(args[0])
+    elif name == "Replace":
+      return b.vb_replace(args[0], args[1], args[2])
+    elif name == "Int":
+      return b.vb_int(args[0])
+    elif name == "Fix":
+      return b.vb_fix(args[0])
+    elif name == "Abs":
+      return b.vb_abs(args[0])
+    elif name == "Sgn":
+      return b.vb_sgn(args[0])
+    elif name == "Rnd":
+      return b.vb_rnd()
+    elif name == "Randomize":
+      return b.vb_randomize(args[0])
+    elif name == "Now":
+      return b.vb_now()
+    elif name == "IsNumeric":
+      return b.vb_isnumeric(args[0])
+    elif name == "CStr":
+      return b.vb_cstr(args[0])
+    elif name == "CInt":
+      return b.vb_cint(args[0])
+    elif name == "CLng":
+      return b.vb_clng(args[0])
+    elif name == "CSng":
+      return b.vb_csng(args[0])
+    elif name == "CDbl":
+      return b.vb_cdbl(args[0])
+    elif name == "CBool":
+      return b.vb_cbool(args[0])
+    elif name == "Hex":
+      return b.vb_hex(args[0])
+    elif name == "Oct":
+      return b.vb_oct(args[0])
+    elif name == "Format":
+      return b.vb_format(args[0], args[1])
+    elif name == "Array":
+      return b.vb_array(args[0])
+    elif name == "UBound":
+      return b.vb_ubound(args[0], args[1])
+    elif name == "LBound":
+      return b.vb_lbound(args[0], args[1])
+    elif name == "EOF":
+      return b.vb_eof(args[0])
+    elif name == "LOF":
+      return b.vb_lof(args[0])
+    elif name == "Loc":
+      return b.vb_loc(args[0])
+    elif name == "FreeFile":
+      return b.vb_freefile()
+    elif name == "FileLen":
+      return b.vb_filelen(args[0])
+    elif name == "Dir":
+      return b.vb_dir(args[0])
+    elif name == "CurDir":
+      return b.vb_curdir()
+    elif name == "ChDir":
+      return b.vb_chdir(args[0])
+    elif name == "MkDir":
+      return b.vb_mkdir(args[0])
+    elif name == "RmDir":
+      return b.vb_rmdir(args[0])
+    elif name == "Kill":
+      return b.vb_kill(args[0])
+    elif name == "FileCopy":
+      return b.vb_filecopy(args[0], args[1])
+    elif name == "Date":
+      return b.vb_date()
+    elif name == "Time":
+      return b.vb_time()
+    elif name == "Timer":
+      return b.vb_timer()
+    elif name == "DateSerial":
+      return b.vb_dateserial(args[0], args[1], args[2])
+    elif name == "DateValue":
+      return b.vb_datevalue(args[0])
+    elif name == "TimeSerial":
+      return b.vb_timeserial(args[0], args[1], args[2])
+    elif name == "TimeValue":
+      return b.vb_timevalue(args[0])
+    elif name == "Weekday":
+      return b.vb_weekday(args[0])
+    elif name == "Month":
+      return b.vb_month(args[0])
+    elif name == "Year":
+      return b.vb_year(args[0])
+    elif name == "Day":
+      return b.vb_day(args[0])
+    elif name == "Hour":
+      return b.vb_hour(args[0])
+    elif name == "Minute":
+      return b.vb_minute(args[0])
+    elif name == "Second":
+      return b.vb_second(args[0])
+    elif name == "MonthName":
+      return b.vb_monthname(args[0])
+    elif name == "WeekdayName":
+      return b.vb_weekdayname(args[0])
+    elif name == "InStr":
+      return b.vb_instr(args[0], args[1], args[2])
+    elif name == "InStrRev":
+      return b.vb_instrrev(args[0], args[1], args[2])
+    elif name == "StrReverse":
+      return b.vb_strreverse(args[0])
+    elif name == "LTrim":
+      return b.vb_ltrim(args[0])
+    elif name == "RTrim":
+      return b.vb_rtrim(args[0])
+    elif name == "Space":
+      return b.vb_space(args[0])
+    elif name == "String":
+      return b.vb_string(args[0], args[1])
+    elif name == "Split":
+      return b.vb_split(args[0], args[1])
+    elif name == "Join":
+      return b.vb_join(args[0], args[1])
+    elif name == "Filter":
+      return b.vb_filter(args[0], args[1], args[2])
+    elif name == "StrComp":
+      return b.vb_strcomp(args[0], args[1], args[2])
+    elif name == "Exp":
+      return b.vb_exp(args[0])
+    elif name == "Log":
+      return b.vb_log(args[0])
+    elif name == "Sqr":
+      return b.vb_sqr(args[0])
+    elif name == "Round":
+      return b.vb_round(args[0], args[1])
+    elif name == "Val":
+      return b.vb_val(args[0])
+    elif name == "Str":
+      return b.vb_str(args[0])
+    elif name == "FormatCurrency":
+      return b.vb_formatcurrency(args[0], args[1])
+    elif name == "FormatNumber":
+      return b.vb_formatnumber(args[0], args[1])
+    elif name == "FormatPercent":
+      return b.vb_formatpercent(args[0], args[1])
+    elif name == "TypeName":
+      return b.vb_typename(args[0])
+    elif name == "VarType":
+      return b.vb_vartype(args[0])
+    elif name == "IsArray":
+      return b.vb_isarray(args[0])
+    elif name == "IsDate":
+      return b.vb_isdate(args[0])
+    elif name == "IsEmpty":
+      return b.vb_isempty(args[0])
+    elif name == "IsNull":
+      return b.vb_isnull(args[0])
+    elif name == "IsObject":
+      return b.vb_isobject(args[0])
+    elif name == "DoEvents":
+      return b.vb_doevents()
+    elif name == "Beep":
+      return b.vb_beep()
+    elif name == "Environ":
+      return b.vb_environ(args[0])
+    elif name == "Command":
+      return b.vb_command()
+    elif name == "IMEStatus":
+      return b.vb_imestatus()
+    elif name == "Calendar":
+      return b.vb_calendar()
+    elif name == "GetSetting":
+      return b.vb_getsetting(args[0], args[1], args[2], args[3])
+    elif name == "GetAllSettings":
+      return b.vb_getallsettings(args[0], args[1])
+    elif name == "SaveSetting":
+      return b.vb_savesetting(args[0], args[1], args[2], args[3])
+    elif name == "DeleteSetting":
+      return b.vb_deletesetting(args[0], args[1], args[2])
+    elif name == "FV":
+      return b.vb_fv(args[0], args[1], args[2], args[3], args[4])
+    elif name == "PV":
+      return b.vb_pv(args[0], args[1], args[2], args[3], args[4])
+    elif name == "NPV":
+      return b.vb_npv(args[0], args[1])
+    elif name == "PMT":
+      return b.vb_pmt(args[0], args[1], args[2], args[3], args[4])
+    elif name == "PPMT":
+      return b.vb_ppmt(args[0], args[1], args[2], args[3], args[4], args[5])
+    elif name == "IPMT":
+      return b.vb_ipmt(args[0], args[1], args[2], args[3], args[4], args[5])
+    elif name == "Rate":
+      return b.vb_rate(args[0], args[1], args[2], args[3], args[4], args[5])
+    elif name == "NPer":
+      return b.vb_nper(args[0], args[1], args[2], args[3], args[4])
+    elif name == "SLN":
+      return b.vb_sln(args[0], args[1], args[2])
+    elif name == "SYD":
+      return b.vb_syd(args[0], args[1], args[2], args[3])
+    elif name == "DDB":
+      return b.vb_ddb(args[0], args[1], args[2], args[3], args[4])
+    elif name == "RGB":
+      return b.vb_rgb(args[0], args[1], args[2])
+    elif name == "QBColor":
+      return b.vb_qbcolor(args[0])
+    elif name == "Choose":
+      return b.vb_choose(args)
+    elif name == "IIf":
+      return b.vb_iif(args[0], args[1], args[2])
+    elif name == "Switch":
+      return b.vb_switch(args)
 
   proc exec_call(self, node):
     let name = node.name
@@ -331,7 +589,7 @@ class Interpreter:
       push(args, self.eval_expression(arg))
     # Check builtins
     if dict_has(self.builtins, name):
-      self.call_builtin(self.builtins[name], args)
+      self.dispatch_builtin(name, args)
       return nil
     # Check defined procedures
     let proc_def = self.global_env.get_proc(name)
@@ -344,12 +602,15 @@ class Interpreter:
     let local_env = Environment(self.global_env)
     let saved_env = self.global_env
     self.global_env = local_env
-    # Bind parameters
+    # Bind parameters (with optional defaults)
     for i in range(len(params)):
       if i < len(args):
         local_env.set(params[i].name, args[i])
       else:
-        local_env.set(params[i].name, nil)
+        let default_val = nil
+        if params[i].default_value != nil:
+          default_val = self.eval_expression(params[i].default_value)
+        local_env.set(params[i].name, default_val)
     # Execute body
     let old_exit = self.current_exit
     self.current_exit = nil
@@ -365,7 +626,10 @@ class Interpreter:
       if i < len(args):
         local_env.set(params[i].name, args[i])
       else:
-        local_env.set(params[i].name, nil)
+        let default_val = nil
+        if params[i].default_value != nil:
+          default_val = self.eval_expression(params[i].default_value)
+        local_env.set(params[i].name, default_val)
     let old_return = self.current_return
     let old_exit = self.current_exit
     self.current_return = nil
@@ -525,6 +789,25 @@ class Interpreter:
     f["pos"] = pos
     return nil
 
+  proc exec_line_input(self, node):
+    let filenum = str(tonumber(str(node.filenum)))
+    if not dict_has(self.open_files, filenum):
+      return nil
+    let f = self.open_files[filenum]
+    let content = f["content"]
+    if not dict_has(f, "pos"):
+      f["pos"] = 0
+    let pos = f["pos"]
+    let remaining = content[pos:]
+    let newline_idx = strings.indexof(remaining, "\n")
+    let end_idx = len(content)
+    if newline_idx >= 0:
+      end_idx = pos + newline_idx
+    let line = content[pos:end_idx]
+    self.global_env.set(node.variable, line)
+    f["pos"] = end_idx + 1
+    return nil
+
   # --- GoSub / Return ---
 
   proc exec_gosub(self, node):
@@ -545,6 +828,47 @@ class Interpreter:
         self.def_types[r["end"]] = node.type_name
     return nil
 
+  # --- Error Handling / GoTo ---
+
+  proc exec_goto(self, node):
+    self.jump_to_label = node.label
+    return nil
+
+  proc exec_on_error(self, node):
+    self.error_handler = node
+    self.error_raised = false
+    self.error_number = 0
+    self.error_description = ""
+    return nil
+
+  proc exec_resume(self, node):
+    let target = node.target
+    if target == "next":
+      self.error_raised = false
+      self.error_handler = nil
+      self.error_resume_next = true
+    elif target == "current" or target == nil:
+      self.error_raised = false
+      self.error_handler = nil
+    else:
+      self.error_raised = false
+      self.error_handler = nil
+      self.jump_to_label = target
+    return nil
+
+  proc raise_error(self, err_num, desc):
+    self.error_number = err_num
+    self.error_description = desc
+    self.error_raised = true
+    if self.error_handler != nil:
+      let mode = self.error_handler.action
+      if mode == "resume":
+        self.error_resume_next = true
+      elif mode == "goto":
+        self.jump_to_label = self.error_handler.target
+      return true
+    return false
+
   proc exec_for(self, node):
     let start = tonumber(str(self.eval_expression(node.start)))
     let end = tonumber(str(self.eval_expression(node.end)))
@@ -555,6 +879,8 @@ class Interpreter:
     let var_name = node.variable
     if step > 0:
       while self.global_env.get(var_name) <= end:
+        if self.jump_to_label != nil:
+          break
         if self.current_exit != nil:
           self.current_exit = nil
           break
@@ -563,6 +889,8 @@ class Interpreter:
         self.global_env.set(var_name, cur + step)
     else:
       while self.global_env.get(var_name) >= end:
+        if self.jump_to_label != nil:
+          break
         if self.current_exit != nil:
           self.current_exit = nil
           break
@@ -573,6 +901,8 @@ class Interpreter:
   proc exec_foreach(self, node):
     let collection = self.eval_expression(node.collection)
     for item in collection:
+      if self.jump_to_label != nil:
+        break
       if self.current_exit != nil:
         self.current_exit = nil
         break
@@ -595,6 +925,8 @@ class Interpreter:
   proc exec_do(self, node):
     if node.loop_type == "while":
       while true:
+        if self.jump_to_label != nil:
+          break
         if self.current_exit != nil:
           self.current_exit = nil
           break
@@ -604,6 +936,8 @@ class Interpreter:
         self.exec_statement(node.body)
     elif node.loop_type == "until":
       while true:
+        if self.jump_to_label != nil:
+          break
         if self.current_exit != nil:
           self.current_exit = nil
           break
@@ -614,6 +948,8 @@ class Interpreter:
 
   proc exec_while(self, node):
     while true:
+      if self.jump_to_label != nil:
+        break
       if self.current_exit != nil:
         self.current_exit = nil
         break
@@ -723,7 +1059,7 @@ class Interpreter:
     for arg in node.args:
       push(args, self.eval_expression(arg))
     if dict_has(self.builtins, name):
-      return self.call_builtin(self.builtins[name], args)
+      return self.dispatch_builtin(name, args)
     let func_def = self.global_env.get_func(name)
     if func_def != nil:
       return self.exec_func_body(name, func_def["params"], func_def["body"], args)

@@ -78,11 +78,12 @@ class ConstDecl(Node):
     self.value = value
 
 class Param(Node):
-  proc init(self, name, type_name, by_ref):
+  proc init(self, name, type_name, by_ref, default_value=nil):
     super.init("Param")
     self.name = name
     self.type_name = type_name
     self.by_ref = by_ref
+    self.default_value = default_value
 
 class Block(Node):
   proc init(self, statements):
@@ -386,3 +387,8 @@ class UnloadStmt(Node):
 class StopStmt(Node):
   proc init(self):
     super.init("StopStmt")
+
+class LabelDef(Node):
+  proc init(self, name):
+    super.init("LabelDef")
+    self.name = name

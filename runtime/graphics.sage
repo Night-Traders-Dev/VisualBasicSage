@@ -32,20 +32,20 @@ class Graphics:
 
   ## Draw a line
   proc draw_line(self, x1, y1, x2, y2):
-    pass  # TODO: implement line drawing
+    return nil  # TODO: implement line drawing
 
   ## Draw a rectangle
   proc draw_rect(self, x1, y1, x2, y2):
-    pass
+    return nil
 
   ## Fill a rectangle
   proc fill_rect(self, x1, y1, x2, y2, color):
-    pass
+    return nil
 
   ## Draw a circle
   proc draw_circle(self, cx, cy, r):
-    pass
+    return nil
 
   ## Draw a point
   proc draw_point(self, x, y, color):
-    pass
+    return nil

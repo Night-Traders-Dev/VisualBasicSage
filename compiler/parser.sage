@@ -4,32 +4,35 @@ import strings
 import compiler.lexer as lx
 import compiler.ast as ast
 
-## Parser: recursive descent parser for VB4
-proc parse(tokens):
-  let pos = 0
-  let tok_len = len(tokens)
+class Parser:
+  proc init(self, tokens):
+    self.pos = 0
+    self.tokens = tokens
+    self.tok_len = len(tokens)
 
-  proc peek(offset=0):
-    let idx = pos + offset
-    if idx < tok_len:
-      return tokens[idx]
+  proc peek(self, offset):
+    if offset == nil:
+      offset = 0
+    let idx = self.pos + offset
+    if idx < self.tok_len:
+      return self.tokens[idx]
     return nil
 
-  proc advance():
-    let tok = tokens[pos]
-    pos = pos + 1
+  proc advance(self):
+    let tok = self.tokens[self.pos]
+    self.pos = self.pos + 1
     return tok
 
-  proc expect(type_, value=nil):
-    let tok = advance()
+  proc expect(self, type_, value=nil):
+    let tok = self.advance()
     if tok["type"] != type_:
       raise "Expected " + type_ + " at L" + str(tok["line"]) + ":" + str(tok["col"]) + ", got " + tok["type"]
     if value != nil and tok["value"] != value:
       raise "Expected " + str(value) + " at L" + str(tok["line"]) + ":" + str(tok["col"]) + ", got " + str(tok["value"])
     return tok
 
-  proc check(type_, value=nil):
-    let tok = peek()
+  proc check(self, type_, value=nil):
+    let tok = self.peek()
     if tok == nil:
       return false
     if tok["type"] != type_:
@@ -38,190 +41,206 @@ proc parse(tokens):
       return false
     return true
 
-  proc skip_newlines():
-    while check(lx.TOKEN_NEWLINE) or check(lx.TOKEN_COMMENT):
-      advance()
+  proc skip_newlines(self):
+    while self.check(lx.TOKEN_NEWLINE) or self.check(lx.TOKEN_COMMENT):
+      self.advance()
 
   # --- Expression parsing (12 precedence levels) ---
 
-  proc parse_expression():
-    return parse_logical_or()
+  proc parse_expression(self):
+    return self.parse_logical_or()
 
-  proc parse_logical_or():
-    let left = parse_logical_and()
-    while check(lx.TOKEN_KEYWORD, "Or"):
-      advance()
-      let right = parse_logical_and()
+  proc parse_logical_or(self):
+    let left = self.parse_logical_and()
+    while self.check(lx.TOKEN_KEYWORD, "Or"):
+      self.advance()
+      let right = self.parse_logical_and()
       left = ast.BinaryOp("Or", left, right)
     return left
 
-  proc parse_logical_and():
-    let left = parse_equality()
-    while check(lx.TOKEN_KEYWORD, "And"):
-      advance()
-      let right = parse_equality()
+  proc parse_logical_and(self):
+    let left = self.parse_equality()
+    while self.check(lx.TOKEN_KEYWORD, "And"):
+      self.advance()
+      let right = self.parse_equality()
       left = ast.BinaryOp("And", left, right)
     return left
 
-  proc parse_equality():
-    let left = parse_comparison()
-    while check(lx.TOKEN_OPERATOR):
-      let op = peek()["value"]
+  proc parse_equality(self):
+    let left = self.parse_comparison()
+    while self.check(lx.TOKEN_OPERATOR):
+      let op = self.peek()["value"]
       if op == "=" or op == "<>":
-        advance()
-        let right = parse_comparison()
+        self.advance()
+        let right = self.parse_comparison()
         left = ast.BinaryOp(op, left, right)
       else:
         break
     return left
 
-  proc parse_comparison():
-    let left = parse_addition()
-    while check(lx.TOKEN_OPERATOR):
-      let op = peek()["value"]
+  proc parse_comparison(self):
+    let left = self.parse_addition()
+    while self.check(lx.TOKEN_OPERATOR):
+      let op = self.peek()["value"]
       if op == "<" or op == ">" or op == "<=" or op == ">=":
-        advance()
-        let right = parse_addition()
+        self.advance()
+        let right = self.parse_addition()
         left = ast.BinaryOp(op, left, right)
       else:
         break
     return left
 
-  proc parse_addition():
-    let left = parse_multiplication()
-    while check(lx.TOKEN_OPERATOR):
-      let op = peek()["value"]
+  proc parse_addition(self):
+    let left = self.parse_multiplication()
+    while self.check(lx.TOKEN_OPERATOR):
+      let op = self.peek()["value"]
       if op == "+" or op == "-" or op == "&":
-        advance()
-        let right = parse_multiplication()
+        self.advance()
+        let right = self.parse_multiplication()
         left = ast.BinaryOp(op, left, right)
       else:
         break
     return left
 
-  proc parse_multiplication():
-    let left = parse_unary()
-    while check(lx.TOKEN_OPERATOR) or check(lx.TOKEN_KEYWORD, "Mod"):
-      let op = peek()["value"]
+  proc parse_multiplication(self):
+    let left = self.parse_unary()
+    while self.check(lx.TOKEN_OPERATOR) or self.check(lx.TOKEN_KEYWORD, "Mod"):
+      let op = self.peek()["value"]
       if op == "*" or op == "/" or op == "\\" or op == "^" or op == "Mod":
-        advance()
-        let right = parse_unary()
+        self.advance()
+        let right = self.parse_unary()
         left = ast.BinaryOp(op, left, right)
       else:
         break
     return left
 
-  proc parse_unary():
-    if check(lx.TOKEN_OPERATOR):
-      let op = peek()["value"]
+  proc parse_unary(self):
+    if self.check(lx.TOKEN_OPERATOR):
+      let op = self.peek()["value"]
       if op == "+" or op == "-":
-        advance()
-        let operand = parse_unary()
+        self.advance()
+        let operand = self.parse_unary()
         return ast.UnaryOp(op, operand)
-    if check(lx.TOKEN_KEYWORD, "Not"):
-      advance()
-      let operand = parse_unary()
+    if self.check(lx.TOKEN_KEYWORD, "Not"):
+      self.advance()
+      let operand = self.parse_unary()
       return ast.UnaryOp("Not", operand)
-    return parse_primary()
+    return self.parse_primary()
 
-  proc parse_primary():
-    if check(lx.TOKEN_INTEGER):
-      let tok = advance()
+  proc parse_primary(self):
+    if self.check(lx.TOKEN_INTEGER):
+      let tok = self.advance()
       return ast.Literal("Integer", tok["value"])
-    if check(lx.TOKEN_FLOAT):
-      let tok = advance()
+    if self.check(lx.TOKEN_FLOAT):
+      let tok = self.advance()
       return ast.Literal("Double", tok["value"])
-    if check(lx.TOKEN_STRING):
-      let tok = advance()
+    if self.check(lx.TOKEN_STRING):
+      let tok = self.advance()
       return ast.Literal("String", tok["value"])
-    if check(lx.TOKEN_KEYWORD, "True"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "True"):
+      self.advance()
       return ast.Literal("Boolean", true)
-    if check(lx.TOKEN_KEYWORD, "False"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "False"):
+      self.advance()
       return ast.Literal("Boolean", false)
-    if check(lx.TOKEN_KEYWORD, "Nothing"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "Nothing"):
+      self.advance()
       return ast.NothingExpr()
-    if check(lx.TOKEN_KEYWORD, "Me"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "Me"):
+      self.advance()
       return ast.MeExpr()
-    if check(lx.TOKEN_KEYWORD, "New"):
-      advance()
-      let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+    if self.check(lx.TOKEN_KEYWORD, "New"):
+      self.advance()
+      let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       return ast.NewExpr(name)
-    if check(lx.TOKEN_DELIMITER, "("):
-      advance()
-      let expr = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ")")
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      self.advance()
+      let expr = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ")")
       return expr
-    if check(lx.TOKEN_IDENTIFIER):
-      let tok = advance()
+    if self.check(lx.TOKEN_KEYWORD):
+      let tok = self.advance()
       let name = tok["value"]
-      if check(lx.TOKEN_DELIMITER, "("):
-        let args = parse_args()
+      if self.check(lx.TOKEN_DELIMITER, "("):
+        let args = self.parse_args()
         return ast.FunctionCall(name, args)
-      if check(lx.TOKEN_DELIMITER, "."):
-        advance()
-        let member = expect(lx.TOKEN_IDENTIFIER)["value"]
+      return ast.Identifier(name)
+    if self.check(lx.TOKEN_IDENTIFIER):
+      let tok = self.advance()
+      let name = tok["value"]
+      if self.check(lx.TOKEN_DELIMITER, "("):
+        let args = self.parse_args()
+        return ast.FunctionCall(name, args)
+      if self.check(lx.TOKEN_DELIMITER, "."):
+        self.advance()
+        let member = self.expect(lx.TOKEN_IDENTIFIER)["value"]
         return ast.MemberAccess(ast.Identifier(name), member)
       return ast.Identifier(name)
-    raise "Unexpected token in expression: " + peek()["type"]
+    raise "Unexpected token in expression: " + self.peek()["type"]
 
-  proc parse_args():
-    expect(lx.TOKEN_DELIMITER, "(")
+  proc parse_args(self):
+    self.expect(lx.TOKEN_DELIMITER, "(")
     let args = []
-    while not check(lx.TOKEN_DELIMITER, ")"):
-      skip_newlines()
-      push(args, parse_expression())
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-    expect(lx.TOKEN_DELIMITER, ")")
+    while not self.check(lx.TOKEN_DELIMITER, ")"):
+      self.skip_newlines()
+      push(args, self.parse_expression())
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+    self.expect(lx.TOKEN_DELIMITER, ")")
     return args
 
-  proc parse_params():
-    expect(lx.TOKEN_DELIMITER, "(")
+  proc parse_params(self):
+    self.expect(lx.TOKEN_DELIMITER, "(")
     let params = []
-    while not check(lx.TOKEN_DELIMITER, ")"):
-      skip_newlines()
+    while not self.check(lx.TOKEN_DELIMITER, ")"):
+      self.skip_newlines()
       let by_ref = true
-      if check(lx.TOKEN_KEYWORD, "ByVal"):
-        advance()
+      let is_optional = false
+      if self.check(lx.TOKEN_KEYWORD, "ByVal"):
+        self.advance()
         by_ref = false
-      elif check(lx.TOKEN_KEYWORD, "ByRef"):
-        advance()
-      elif check(lx.TOKEN_KEYWORD, "Optional"):
-        advance()
-      let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+      elif self.check(lx.TOKEN_KEYWORD, "ByRef"):
+        self.advance()
+      elif self.check(lx.TOKEN_KEYWORD, "Optional"):
+        self.advance()
+        is_optional = true
+      let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       let as_type = nil
-      if check(lx.TOKEN_KEYWORD, "As"):
-        advance()
-        as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
-      push(params, ast.Param(name, as_type, by_ref))
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-    expect(lx.TOKEN_DELIMITER, ")")
+      if self.check(lx.TOKEN_KEYWORD, "As"):
+        self.advance()
+        if self.check(lx.TOKEN_IDENTIFIER):
+          as_type = self.advance()["value"]
+        elif self.check(lx.TOKEN_KEYWORD):
+          as_type = self.advance()["value"]
+      let default_value = nil
+      if is_optional and self.check(lx.TOKEN_OPERATOR, "="):
+        self.advance()
+        default_value = self.parse_expression()
+      push(params, ast.Param(name, as_type, by_ref, default_value))
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+    self.expect(lx.TOKEN_DELIMITER, ")")
     return params
 
-  proc parse_dimensions():
-    expect(lx.TOKEN_DELIMITER, "(")
+  proc parse_dimensions(self):
+    self.expect(lx.TOKEN_DELIMITER, "(")
     let dims = []
-    while not check(lx.TOKEN_DELIMITER, ")"):
-      skip_newlines()
-      push(dims, parse_expression())
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-    expect(lx.TOKEN_DELIMITER, ")")
+    while not self.check(lx.TOKEN_DELIMITER, ")"):
+      self.skip_newlines()
+      push(dims, self.parse_expression())
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+    self.expect(lx.TOKEN_DELIMITER, ")")
     return dims
 
   # --- Block parsing ---
 
-  proc parse_block(terminators):
+  proc parse_block(self, terminators):
     let stmts = []
-    while not check(lx.TOKEN_EOF):
-      skip_newlines()
-      if check(lx.TOKEN_KEYWORD):
-        let val = peek()["value"]
+    while not self.check(lx.TOKEN_EOF):
+      self.skip_newlines()
+      if self.check(lx.TOKEN_KEYWORD):
+        let val = self.peek()["value"]
         let is_term = false
         for t in terminators:
           if t == val:
@@ -229,765 +248,784 @@ proc parse(tokens):
             break
         if is_term:
           break
-      let stmt = parse_statement()
+      let stmt = self.parse_statement()
       if stmt != nil:
         push(stmts, stmt)
-      skip_newlines()
+      self.skip_newlines()
     return ast.Block(stmts)
 
   # --- Statement parsing ---
 
-  proc parse_statement():
-    if check(lx.TOKEN_KEYWORD, "Dim"):
-      return parse_dim_stmt()
-    if check(lx.TOKEN_KEYWORD, "Const"):
-      return parse_const()
-    if check(lx.TOKEN_KEYWORD, "If"):
-      return parse_if()
-    if check(lx.TOKEN_KEYWORD, "Select"):
-      return parse_select()
-    if check(lx.TOKEN_KEYWORD, "For"):
-      return parse_for()
-    if check(lx.TOKEN_KEYWORD, "Do"):
-      return parse_do()
-    if check(lx.TOKEN_KEYWORD, "While"):
-      return parse_while()
-    if check(lx.TOKEN_KEYWORD, "With"):
-      return parse_with()
-    if check(lx.TOKEN_KEYWORD, "Exit"):
-      return parse_exit()
-    if check(lx.TOKEN_KEYWORD, "GoTo"):
-      return parse_goto()
-    if check(lx.TOKEN_KEYWORD, "GoSub"):
-      return parse_gosub()
-    if check(lx.TOKEN_KEYWORD, "Return"):
-      return parse_return()
-    if check(lx.TOKEN_KEYWORD, "On"):
-      return parse_on_error()
-    if check(lx.TOKEN_KEYWORD, "Resume"):
-      return parse_resume()
-    if check(lx.TOKEN_KEYWORD, "RaiseEvent"):
-      return parse_raise_event()
-    if check(lx.TOKEN_KEYWORD, "ReDim"):
-      return parse_redim()
-    if check(lx.TOKEN_KEYWORD, "Erase"):
-      return parse_erase()
-    if check(lx.TOKEN_KEYWORD, "Set"):
-      return parse_set_stmt()
-    if check(lx.TOKEN_KEYWORD, "Call"):
-      return parse_call_stmt()
-    if check(lx.TOKEN_KEYWORD, "Open"):
-      return parse_open()
-    if check(lx.TOKEN_KEYWORD, "Close"):
-      return parse_close()
-    if check(lx.TOKEN_KEYWORD, "Put"):
-      return parse_put()
-    if check(lx.TOKEN_KEYWORD, "Get"):
-      return parse_get()
-    if check(lx.TOKEN_KEYWORD, "Write"):
-      return parse_write()
-    if check(lx.TOKEN_KEYWORD, "Print"):
-      return parse_print_stmt()
-    if check(lx.TOKEN_KEYWORD, "Input"):
-      return parse_input()
-    if check(lx.TOKEN_KEYWORD, "Line"):
-      return parse_line()
-    if check(lx.TOKEN_KEYWORD, "Circle"):
-      return parse_circle()
-    if check(lx.TOKEN_KEYWORD, "PSet"):
-      return parse_pset()
-    if check(lx.TOKEN_KEYWORD, "Cls"):
-      return parse_cls()
-    if check(lx.TOKEN_KEYWORD, "Load"):
-      return parse_load()
-    if check(lx.TOKEN_KEYWORD, "Unload"):
-      return parse_unload()
-    if check(lx.TOKEN_KEYWORD, "Stop"):
-      return parse_stop()
-    if check(lx.TOKEN_KEYWORD, "Rem"):
-      skip_newlines()
+  proc parse_statement(self):
+    if self.check(lx.TOKEN_KEYWORD, "Dim"):
+      return self.parse_dim_stmt()
+    if self.check(lx.TOKEN_KEYWORD, "Const"):
+      return self.parse_const()
+    if self.check(lx.TOKEN_KEYWORD, "If"):
+      return self.parse_if()
+    if self.check(lx.TOKEN_KEYWORD, "Select"):
+      return self.parse_select()
+    if self.check(lx.TOKEN_KEYWORD, "For"):
+      return self.parse_for()
+    if self.check(lx.TOKEN_KEYWORD, "Do"):
+      return self.parse_do()
+    if self.check(lx.TOKEN_KEYWORD, "While"):
+      return self.parse_while()
+    if self.check(lx.TOKEN_KEYWORD, "With"):
+      return self.parse_with()
+    if self.check(lx.TOKEN_KEYWORD, "Exit"):
+      return self.parse_exit()
+    if self.check(lx.TOKEN_KEYWORD, "GoTo"):
+      return self.parse_goto()
+    if self.check(lx.TOKEN_KEYWORD, "GoSub"):
+      return self.parse_gosub()
+    if self.check(lx.TOKEN_KEYWORD, "Return"):
+      return self.parse_return()
+    if self.check(lx.TOKEN_KEYWORD, "On"):
+      return self.parse_on_error()
+    if self.check(lx.TOKEN_KEYWORD, "Resume"):
+      return self.parse_resume()
+    if self.check(lx.TOKEN_KEYWORD, "RaiseEvent"):
+      return self.parse_raise_event()
+    if self.check(lx.TOKEN_KEYWORD, "ReDim"):
+      return self.parse_redim()
+    if self.check(lx.TOKEN_KEYWORD, "Erase"):
+      return self.parse_erase()
+    if self.check(lx.TOKEN_KEYWORD, "Set"):
+      return self.parse_set_stmt()
+    if self.check(lx.TOKEN_KEYWORD, "Call"):
+      return self.parse_call_stmt()
+    if self.check(lx.TOKEN_KEYWORD, "Open"):
+      return self.parse_open()
+    if self.check(lx.TOKEN_KEYWORD, "Close"):
+      return self.parse_close()
+    if self.check(lx.TOKEN_KEYWORD, "Put"):
+      return self.parse_put()
+    if self.check(lx.TOKEN_KEYWORD, "Get"):
+      return self.parse_get()
+    if self.check(lx.TOKEN_KEYWORD, "Write"):
+      return self.parse_write()
+    if self.check(lx.TOKEN_KEYWORD, "Print"):
+      return self.parse_print_stmt()
+    if self.check(lx.TOKEN_KEYWORD, "Input"):
+      return self.parse_input()
+    if self.check(lx.TOKEN_KEYWORD, "Line"):
+      return self.parse_line()
+    if self.check(lx.TOKEN_KEYWORD, "Circle"):
+      return self.parse_circle()
+    if self.check(lx.TOKEN_KEYWORD, "PSet"):
+      return self.parse_pset()
+    if self.check(lx.TOKEN_KEYWORD, "Cls"):
+      return self.parse_cls()
+    if self.check(lx.TOKEN_KEYWORD, "Load"):
+      return self.parse_load()
+    if self.check(lx.TOKEN_KEYWORD, "Unload"):
+      return self.parse_unload()
+    if self.check(lx.TOKEN_KEYWORD, "Stop"):
+      return self.parse_stop()
+    if self.check(lx.TOKEN_KEYWORD, "Rem"):
+      self.skip_newlines()
       return nil
-    if check(lx.TOKEN_KEYWORD):
-      let kw = peek()["value"]
+    if self.check(lx.TOKEN_KEYWORD):
+      let kw = self.peek()["value"]
       if strings.startswith(kw, "Def"):
-        return parse_deftype()
-    if check(lx.TOKEN_IDENTIFIER):
-      return parse_identifier_stmt()
-    if check(lx.TOKEN_NEWLINE):
-      advance()
+        return self.parse_deftype()
+      return self.parse_identifier_stmt()
+    if self.check(lx.TOKEN_IDENTIFIER):
+      return self.parse_identifier_stmt()
+    if self.check(lx.TOKEN_NEWLINE):
+      self.advance()
       return nil
-    raise "Unexpected token " + peek()["type"] + " at L" + str(peek()["line"])
+    raise "Unexpected token " + self.peek()["type"] + " at L" + str(self.peek()["line"])
 
-  proc parse_dim_stmt():
-    expect(lx.TOKEN_KEYWORD, "Dim")
+  proc parse_dim_stmt(self):
+    self.expect(lx.TOKEN_KEYWORD, "Dim")
     let vars = []
     while true:
-      let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+      let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       let as_type = nil
-      if check(lx.TOKEN_KEYWORD, "As"):
-        advance()
-        if check(lx.TOKEN_IDENTIFIER):
-          as_type = advance()["value"]
-        elif check(lx.TOKEN_KEYWORD):
-          as_type = advance()["value"]
+      if self.check(lx.TOKEN_KEYWORD, "As"):
+        self.advance()
+        if self.check(lx.TOKEN_IDENTIFIER):
+          as_type = self.advance()["value"]
+        elif self.check(lx.TOKEN_KEYWORD):
+          as_type = self.advance()["value"]
       push(vars, ast.VariableDecl(name, as_type))
-      if not check(lx.TOKEN_DELIMITER, ","):
+      if not self.check(lx.TOKEN_DELIMITER, ","):
         break
-      advance()
+      self.advance()
     return vars[0]
 
-  proc parse_const():
-    expect(lx.TOKEN_KEYWORD, "Const")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_const(self):
+    self.expect(lx.TOKEN_KEYWORD, "Const")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let as_type = nil
-    if check(lx.TOKEN_KEYWORD, "As"):
-      advance()
-      if check(lx.TOKEN_IDENTIFIER):
-        as_type = advance()["value"]
-      elif check(lx.TOKEN_KEYWORD):
-        as_type = advance()["value"]
-    expect(lx.TOKEN_OPERATOR, "=")
-    let value = parse_expression()
+    if self.check(lx.TOKEN_KEYWORD, "As"):
+      self.advance()
+      if self.check(lx.TOKEN_IDENTIFIER):
+        as_type = self.advance()["value"]
+      elif self.check(lx.TOKEN_KEYWORD):
+        as_type = self.advance()["value"]
+    self.expect(lx.TOKEN_OPERATOR, "=")
+    let value = self.parse_expression()
     return ast.ConstDecl(name, as_type, value)
 
-  proc parse_if():
-    expect(lx.TOKEN_KEYWORD, "If")
-    let condition = parse_expression()
-    expect(lx.TOKEN_KEYWORD, "Then")
+  proc parse_if(self):
+    self.expect(lx.TOKEN_KEYWORD, "If")
+    let condition = self.parse_expression()
+    self.expect(lx.TOKEN_KEYWORD, "Then")
 
     # Check if single-line If (next token is not a newline)
-    if not check(lx.TOKEN_NEWLINE):
-      # Single-line If: parse one statement as the body
+    if not self.check(lx.TOKEN_NEWLINE):
       let stmts = []
-      push(stmts, parse_statement())
+      push(stmts, self.parse_statement())
       let then_body = ast.Block(stmts)
-      # No Else or End If for single-line
       return ast.IfStatement(condition, then_body, [], nil)
 
     # Block If
-    skip_newlines()
-    let then_body = parse_block(["Else", "ElseIf", "End", "End If"])
+    self.skip_newlines()
+    let then_body = self.parse_block(["Else", "ElseIf", "End", "End If"])
     let else_if_clauses = []
     let else_body = nil
-    while check(lx.TOKEN_KEYWORD, "ElseIf"):
-      advance()
-      let cond = parse_expression()
-      expect(lx.TOKEN_KEYWORD, "Then")
-      skip_newlines()
-      let body = parse_block(["Else", "ElseIf", "End", "End If"])
+    while self.check(lx.TOKEN_KEYWORD, "ElseIf"):
+      self.advance()
+      let cond = self.parse_expression()
+      self.expect(lx.TOKEN_KEYWORD, "Then")
+      self.skip_newlines()
+      let body = self.parse_block(["Else", "ElseIf", "End", "End If"])
       push(else_if_clauses, ast.ElseIfClause(cond, body))
-    if check(lx.TOKEN_KEYWORD, "Else"):
-      advance()
-      skip_newlines()
-      else_body = parse_block(["End", "End If"])
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "If"):
-        advance()
+    if self.check(lx.TOKEN_KEYWORD, "Else"):
+      self.advance()
+      self.skip_newlines()
+      else_body = self.parse_block(["End", "End If"])
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "If"):
+        self.advance()
     return ast.IfStatement(condition, then_body, else_if_clauses, else_body)
 
-  proc parse_select():
-    expect(lx.TOKEN_KEYWORD, "Select")
-    expect(lx.TOKEN_KEYWORD, "Case")
-    let expr = parse_expression()
-    skip_newlines()
+  proc parse_select(self):
+    self.expect(lx.TOKEN_KEYWORD, "Select")
+    self.expect(lx.TOKEN_KEYWORD, "Case")
+    let expr = self.parse_expression()
+    self.skip_newlines()
     let cases = []
-    while check(lx.TOKEN_KEYWORD, "Case"):
-      advance()
+    while self.check(lx.TOKEN_KEYWORD, "Case"):
+      self.advance()
       let values = []
-      # Handle "Case Else" (catch-all)
-      if check(lx.TOKEN_KEYWORD, "Else"):
-        advance()
-        # values stays empty to indicate catch-all
+      if self.check(lx.TOKEN_KEYWORD, "Else"):
+        self.advance()
       else:
-        while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-          let val = parse_expression()
-          # Handle "To" range operator in case values
-          if check(lx.TOKEN_KEYWORD, "To"):
-            advance()
-            let range_end = parse_expression()
+        while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF):
+          let val = self.parse_expression()
+          if self.check(lx.TOKEN_KEYWORD, "To"):
+            self.advance()
+            let range_end = self.parse_expression()
             push(values, ast.RangeClause(val, range_end))
           else:
             push(values, val)
-          if check(lx.TOKEN_DELIMITER, ","):
-            advance()
-      skip_newlines()
-      let body = parse_block(["Case", "End", "End Select"])
+          if self.check(lx.TOKEN_DELIMITER, ","):
+            self.advance()
+      self.skip_newlines()
+      let body = self.parse_block(["Case", "End", "End Select"])
       push(cases, ast.CaseClause(values, body))
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Select"):
-        advance()
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Select"):
+        self.advance()
     return ast.SelectCase(expr, cases)
 
-  proc parse_for():
-    expect(lx.TOKEN_KEYWORD, "For")
-    let var_name = expect(lx.TOKEN_IDENTIFIER)["value"]
-    if check(lx.TOKEN_KEYWORD, "Each"):
-      advance()
-      expect(lx.TOKEN_KEYWORD, "In")
-      let collection = parse_expression()
-      skip_newlines()
-      let body = parse_block(["Next"])
-      if check(lx.TOKEN_KEYWORD, "Next"):
-        advance()
+  proc parse_for(self):
+    self.expect(lx.TOKEN_KEYWORD, "For")
+    let var_name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
+    if self.check(lx.TOKEN_KEYWORD, "Each"):
+      self.advance()
+      self.expect(lx.TOKEN_KEYWORD, "In")
+      let collection = self.parse_expression()
+      self.skip_newlines()
+      let body = self.parse_block(["Next"])
+      if self.check(lx.TOKEN_KEYWORD, "Next"):
+        self.advance()
       return ast.ForEachLoop(var_name, collection, body)
-    expect(lx.TOKEN_OPERATOR, "=")
-    let start = parse_expression()
-    expect(lx.TOKEN_KEYWORD, "To")
-    let end = parse_expression()
+    self.expect(lx.TOKEN_OPERATOR, "=")
+    let start = self.parse_expression()
+    self.expect(lx.TOKEN_KEYWORD, "To")
+    let end = self.parse_expression()
     let step = nil
-    if check(lx.TOKEN_KEYWORD, "Step"):
-      advance()
-      step = parse_expression()
-    skip_newlines()
-    let body = parse_block(["Next"])
-    if check(lx.TOKEN_KEYWORD, "Next"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "Step"):
+      self.advance()
+      step = self.parse_expression()
+    self.skip_newlines()
+    let body = self.parse_block(["Next"])
+    if self.check(lx.TOKEN_KEYWORD, "Next"):
+      self.advance()
     return ast.ForLoop(var_name, start, end, step, body)
 
-  proc parse_do():
-    expect(lx.TOKEN_KEYWORD, "Do")
-    if check(lx.TOKEN_KEYWORD, "While"):
-      advance()
-      let condition = parse_expression()
-      skip_newlines()
-      let body = parse_block(["Loop"])
-      if check(lx.TOKEN_KEYWORD, "Loop"):
-        advance()
+  proc parse_do(self):
+    self.expect(lx.TOKEN_KEYWORD, "Do")
+    if self.check(lx.TOKEN_KEYWORD, "While"):
+      self.advance()
+      let condition = self.parse_expression()
+      self.skip_newlines()
+      let body = self.parse_block(["Loop"])
+      if self.check(lx.TOKEN_KEYWORD, "Loop"):
+        self.advance()
       return ast.DoLoop(condition, "while", body)
-    if check(lx.TOKEN_KEYWORD, "Until"):
-      advance()
-      let condition = parse_expression()
-      skip_newlines()
-      let body = parse_block(["Loop"])
-      if check(lx.TOKEN_KEYWORD, "Loop"):
-        advance()
+    if self.check(lx.TOKEN_KEYWORD, "Until"):
+      self.advance()
+      let condition = self.parse_expression()
+      self.skip_newlines()
+      let body = self.parse_block(["Loop"])
+      if self.check(lx.TOKEN_KEYWORD, "Loop"):
+        self.advance()
       return ast.DoLoop(condition, "until", body)
-    skip_newlines()
-    let body = parse_block(["Loop"])
-    if check(lx.TOKEN_KEYWORD, "Loop"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "While"):
-        advance()
-        let condition = parse_expression()
+    self.skip_newlines()
+    let body = self.parse_block(["Loop"])
+    if self.check(lx.TOKEN_KEYWORD, "Loop"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "While"):
+        self.advance()
+        let condition = self.parse_expression()
         return ast.DoLoop(condition, "while", body)
-      if check(lx.TOKEN_KEYWORD, "Until"):
-        advance()
-        let condition = parse_expression()
+      if self.check(lx.TOKEN_KEYWORD, "Until"):
+        self.advance()
+        let condition = self.parse_expression()
         return ast.DoLoop(condition, "until", body)
     return ast.DoLoop(nil, "while", body)
 
-  proc parse_while():
-    expect(lx.TOKEN_KEYWORD, "While")
-    let condition = parse_expression()
-    skip_newlines()
-    let body = parse_block(["Wend"])
-    if check(lx.TOKEN_KEYWORD, "Wend"):
-      advance()
+  proc parse_while(self):
+    self.expect(lx.TOKEN_KEYWORD, "While")
+    let condition = self.parse_expression()
+    self.skip_newlines()
+    let body = self.parse_block(["Wend"])
+    if self.check(lx.TOKEN_KEYWORD, "Wend"):
+      self.advance()
     return ast.WhileLoop(condition, body)
 
-  proc parse_with():
-    expect(lx.TOKEN_KEYWORD, "With")
-    let obj = parse_expression()
-    skip_newlines()
-    let body = parse_block(["End", "End With"])
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "With"):
-        advance()
+  proc parse_with(self):
+    self.expect(lx.TOKEN_KEYWORD, "With")
+    let obj = self.parse_expression()
+    self.skip_newlines()
+    let body = self.parse_block(["End", "End With"])
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "With"):
+        self.advance()
     return ast.WithBlock(obj, body)
 
-  proc parse_exit():
-    expect(lx.TOKEN_KEYWORD, "Exit")
-    let kind = expect(lx.TOKEN_KEYWORD)["value"]
+  proc parse_exit(self):
+    self.expect(lx.TOKEN_KEYWORD, "Exit")
+    let kind = self.expect(lx.TOKEN_KEYWORD)["value"]
     return ast.ExitStatement(kind)
 
-  proc parse_goto():
-    expect(lx.TOKEN_KEYWORD, "GoTo")
-    let label = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_goto(self):
+    self.expect(lx.TOKEN_KEYWORD, "GoTo")
+    let label = "0"
+    if self.check(lx.TOKEN_INTEGER):
+      label = str(self.expect(lx.TOKEN_INTEGER)["value"])
+    else:
+      label = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     return ast.GoToStatement(label)
 
-  proc parse_on_error():
-    expect(lx.TOKEN_KEYWORD, "On")
-    expect(lx.TOKEN_KEYWORD, "Error")
-    if check(lx.TOKEN_KEYWORD, "GoTo"):
-      advance()
-      let label = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_on_error(self):
+    self.expect(lx.TOKEN_KEYWORD, "On")
+    self.expect(lx.TOKEN_KEYWORD, "Error")
+    if self.check(lx.TOKEN_KEYWORD, "GoTo"):
+      self.advance()
+      let label = "0"
+      if self.check(lx.TOKEN_INTEGER):
+        label = str(self.expect(lx.TOKEN_INTEGER)["value"])
+      else:
+        label = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       return ast.OnError("goto", label)
-    if check(lx.TOKEN_KEYWORD, "Resume"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "Resume"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Next"):
+        self.advance()
       return ast.OnError("resume", nil)
     return ast.OnError("ignore", nil)
 
-  proc parse_resume():
-    expect(lx.TOKEN_KEYWORD, "Resume")
-    if check(lx.TOKEN_KEYWORD, "Next"):
-      advance()
+  proc parse_resume(self):
+    self.expect(lx.TOKEN_KEYWORD, "Resume")
+    if self.check(lx.TOKEN_KEYWORD, "Next"):
+      self.advance()
       return ast.Resume("next")
-    if check(lx.TOKEN_IDENTIFIER):
-      let label = expect(lx.TOKEN_IDENTIFIER)["value"]
+    if self.check(lx.TOKEN_IDENTIFIER):
+      let label = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       return ast.Resume(label)
     return ast.Resume("current")
 
-  proc parse_raise_event():
-    expect(lx.TOKEN_KEYWORD, "RaiseEvent")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_raise_event(self):
+    self.expect(lx.TOKEN_KEYWORD, "RaiseEvent")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let args = []
-    if check(lx.TOKEN_DELIMITER, "("):
-      args = parse_args()
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      args = self.parse_args()
     return ast.RaiseEvent(name, args)
 
-  proc parse_redim():
-    expect(lx.TOKEN_KEYWORD, "ReDim")
+  proc parse_redim(self):
+    self.expect(lx.TOKEN_KEYWORD, "ReDim")
     let preserve = false
-    if check(lx.TOKEN_KEYWORD, "Preserve"):
-      advance()
+    if self.check(lx.TOKEN_KEYWORD, "Preserve"):
+      self.advance()
       preserve = true
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
-    let dims = parse_dimensions()
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
+    let dims = self.parse_dimensions()
     return ast.RedimStatement(name, dims, preserve)
 
-  proc parse_erase():
-    expect(lx.TOKEN_KEYWORD, "Erase")
-    let names = [expect(lx.TOKEN_IDENTIFIER)["value"]]
-    while check(lx.TOKEN_DELIMITER, ","):
-      advance()
-      push(names, expect(lx.TOKEN_IDENTIFIER)["value"])
+  proc parse_erase(self):
+    self.expect(lx.TOKEN_KEYWORD, "Erase")
+    let names = [self.expect(lx.TOKEN_IDENTIFIER)["value"]]
+    while self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
+      push(names, self.expect(lx.TOKEN_IDENTIFIER)["value"])
     return ast.EraseStatement(names)
 
   # --- File I/O ---
 
-  proc parse_open():
-    expect(lx.TOKEN_KEYWORD, "Open")
-    let filepath = parse_expression()
+  proc parse_open(self):
+    self.expect(lx.TOKEN_KEYWORD, "Open")
+    let filepath = self.parse_expression()
     let mode = "Input"
-    if check(lx.TOKEN_KEYWORD, "For"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Input"):
+    if self.check(lx.TOKEN_KEYWORD, "For"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Input"):
         mode = "Input"
-      elif check(lx.TOKEN_KEYWORD, "Output"):
+      elif self.check(lx.TOKEN_KEYWORD, "Output"):
         mode = "Output"
-      elif check(lx.TOKEN_KEYWORD, "Append"):
+      elif self.check(lx.TOKEN_KEYWORD, "Append"):
         mode = "Append"
-      elif check(lx.TOKEN_KEYWORD, "Binary"):
+      elif self.check(lx.TOKEN_KEYWORD, "Binary"):
         mode = "Binary"
-      elif check(lx.TOKEN_KEYWORD, "Random"):
+      elif self.check(lx.TOKEN_KEYWORD, "Random"):
         mode = "Random"
       if mode == "Input" or mode == "Output" or mode == "Append" or mode == "Binary" or mode == "Random":
-        advance()
+        self.advance()
     let access = nil
-    if check(lx.TOKEN_KEYWORD, "Read") or check(lx.TOKEN_KEYWORD, "Write") or check(lx.TOKEN_KEYWORD, "Read Write"):
-      access = advance()["value"]
+    if self.check(lx.TOKEN_KEYWORD, "Read") or self.check(lx.TOKEN_KEYWORD, "Write") or self.check(lx.TOKEN_KEYWORD, "Read Write"):
+      access = self.advance()["value"]
     let lock = nil
-    if check(lx.TOKEN_KEYWORD, "Shared") or check(lx.TOKEN_KEYWORD, "Lock Read") or check(lx.TOKEN_KEYWORD, "Lock Write") or check(lx.TOKEN_KEYWORD, "Lock Read Write"):
-      lock = advance()["value"]
-    expect(lx.TOKEN_KEYWORD, "As")
-    if check(lx.TOKEN_OPERATOR, "#"):
-      advance()
-    let filenum = expect(lx.TOKEN_INTEGER)["value"]
+    if self.check(lx.TOKEN_KEYWORD, "Shared") or self.check(lx.TOKEN_KEYWORD, "Lock Read") or self.check(lx.TOKEN_KEYWORD, "Lock Write") or self.check(lx.TOKEN_KEYWORD, "Lock Read Write"):
+      lock = self.advance()["value"]
+    self.expect(lx.TOKEN_KEYWORD, "As")
+    if self.check(lx.TOKEN_OPERATOR, "#"):
+      self.advance()
+    let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
     let reclen = nil
-    if check(lx.TOKEN_IDENTIFIER) and peek()["value"] == "Len":
-      advance()
-      if check(lx.TOKEN_OPERATOR, "="):
-        advance()
-      reclen = parse_expression()
+    if self.check(lx.TOKEN_IDENTIFIER) and self.peek()["value"] == "Len":
+      self.advance()
+      if self.check(lx.TOKEN_OPERATOR, "="):
+        self.advance()
+      reclen = self.parse_expression()
     return ast.OpenStmt(filepath, mode, filenum, access, lock, reclen)
 
-  proc parse_close():
-    expect(lx.TOKEN_KEYWORD, "Close")
+  proc parse_close(self):
+    self.expect(lx.TOKEN_KEYWORD, "Close")
     let filenums = []
-    if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-      if check(lx.TOKEN_OPERATOR, "#"):
-        advance()
-      push(filenums, expect(lx.TOKEN_INTEGER)["value"])
-      while check(lx.TOKEN_DELIMITER, ","):
-        advance()
-        if check(lx.TOKEN_OPERATOR, "#"):
-          advance()
-        push(filenums, expect(lx.TOKEN_INTEGER)["value"])
+    if not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF):
+      if self.check(lx.TOKEN_OPERATOR, "#"):
+        self.advance()
+      push(filenums, self.expect(lx.TOKEN_INTEGER)["value"])
+      while self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+        if self.check(lx.TOKEN_OPERATOR, "#"):
+          self.advance()
+        push(filenums, self.expect(lx.TOKEN_INTEGER)["value"])
     return ast.CloseStmt(filenums)
 
-  proc parse_put():
-    expect(lx.TOKEN_KEYWORD, "Put")
-    if check(lx.TOKEN_OPERATOR, "#"):
-      advance()
-    let filenum = expect(lx.TOKEN_INTEGER)["value"]
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
+  proc parse_put(self):
+    self.expect(lx.TOKEN_KEYWORD, "Put")
+    if self.check(lx.TOKEN_OPERATOR, "#"):
+      self.advance()
+    let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
     let recordnum = nil
-    if not check(lx.TOKEN_DELIMITER, ",") and not check(lx.TOKEN_NEWLINE):
-      recordnum = parse_expression()
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
-    let variable = parse_expression()
+    if not self.check(lx.TOKEN_DELIMITER, ",") and not self.check(lx.TOKEN_NEWLINE):
+      recordnum = self.parse_expression()
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
+    let variable = self.parse_expression()
     return ast.PutStmt(filenum, recordnum, variable)
 
-  proc parse_get():
-    expect(lx.TOKEN_KEYWORD, "Get")
-    if check(lx.TOKEN_OPERATOR, "#"):
-      advance()
-    let filenum = expect(lx.TOKEN_INTEGER)["value"]
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
+  proc parse_get(self):
+    self.expect(lx.TOKEN_KEYWORD, "Get")
+    if self.check(lx.TOKEN_OPERATOR, "#"):
+      self.advance()
+    let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
     let recordnum = nil
-    if not check(lx.TOKEN_DELIMITER, ",") and not check(lx.TOKEN_NEWLINE):
-      recordnum = parse_expression()
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
-    let variable = parse_expression()
+    if not self.check(lx.TOKEN_DELIMITER, ",") and not self.check(lx.TOKEN_NEWLINE):
+      recordnum = self.parse_expression()
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
+    let variable = self.parse_expression()
     return ast.GetStmt(filenum, recordnum, variable)
 
-  proc parse_write():
-    expect(lx.TOKEN_KEYWORD, "Write")
-    if check(lx.TOKEN_OPERATOR, "#"):
-      advance()
-    let filenum = expect(lx.TOKEN_INTEGER)["value"]
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
+  proc parse_write(self):
+    self.expect(lx.TOKEN_KEYWORD, "Write")
+    if self.check(lx.TOKEN_OPERATOR, "#"):
+      self.advance()
+    let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
     let exprs = []
-    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-      push(exprs, parse_expression())
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
+    while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF):
+      push(exprs, self.parse_expression())
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
     return ast.WriteStmt(filenum, exprs)
 
-  proc parse_print_stmt():
-    # Check for file print (Print #filenum, ...) vs console Print
-    if peek(1) != nil and peek(1)["type"] == lx.TOKEN_OPERATOR and peek(1)["value"] == "#":
-      advance()
-      advance()
-      let filenum = expect(lx.TOKEN_INTEGER)["value"]
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
+  proc parse_print_stmt(self):
+    if self.peek() != nil and self.peek(1)["type"] == lx.TOKEN_OPERATOR and self.peek(1)["value"] == "#":
+      self.advance()  # Print
+      self.advance()  # #
+      let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
       let exprs = []
-      while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-        push(exprs, parse_expression())
-        if check(lx.TOKEN_DELIMITER, ","):
-          advance()
+      while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF):
+        push(exprs, self.parse_expression())
+        if self.check(lx.TOKEN_DELIMITER, ","):
+          self.advance()
       return ast.PrintStmt(filenum, exprs)
     # Console Print - treat as CallStatement("Print", args)
-    let tok = advance()
+    let tok = self.advance()  # consume Print keyword
     let name = tok["value"]
     let args = []
-    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-      push(args, parse_expression())
-      if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
-        if not check(lx.TOKEN_DELIMITER, ","):
+    while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF) and not self.check(lx.TOKEN_COMMENT):
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+      push(args, self.parse_expression())
+      if not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF) and not self.check(lx.TOKEN_COMMENT):
+        if not self.check(lx.TOKEN_DELIMITER, ","):
           break
     return ast.CallStatement(name, args)
 
-  proc parse_input():
-    if peek(1) != nil and peek(1)["type"] == lx.TOKEN_OPERATOR and peek(1)["value"] == "#":
-      advance()
-      advance()
-      let filenum = expect(lx.TOKEN_INTEGER)["value"]
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
+  proc parse_input(self):
+    if self.peek() != nil and self.peek(1)["type"] == lx.TOKEN_OPERATOR and self.peek(1)["value"] == "#":
+      self.advance()  # Input
+      self.advance()  # #
+      let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
       let variables = []
-      while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-        push(variables, expect(lx.TOKEN_IDENTIFIER)["value"])
-        if check(lx.TOKEN_DELIMITER, ","):
-          advance()
+      while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF):
+        push(variables, self.expect(lx.TOKEN_IDENTIFIER)["value"])
+        if self.check(lx.TOKEN_DELIMITER, ","):
+          self.advance()
       return ast.InputStmt(filenum, variables)
     # Console Input - treat as CallStatement("Input", args)
-    let tok = advance()
+    let tok = self.advance()
     let name = tok["value"]
     let args = []
-    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-      push(args, parse_expression())
-      if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
-        if not check(lx.TOKEN_DELIMITER, ","):
+    while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF) and not self.check(lx.TOKEN_COMMENT):
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+      push(args, self.parse_expression())
+      if not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF) and not self.check(lx.TOKEN_COMMENT):
+        if not self.check(lx.TOKEN_DELIMITER, ","):
           break
     return ast.CallStatement(name, args)
 
   # --- GoSub / Return ---
 
-  proc parse_gosub():
-    expect(lx.TOKEN_KEYWORD, "GoSub")
-    let label = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_gosub(self):
+    self.expect(lx.TOKEN_KEYWORD, "GoSub")
+    let label = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     return ast.GoSubStmt(label)
 
-  proc parse_return():
-    expect(lx.TOKEN_KEYWORD, "Return")
+  proc parse_return(self):
+    self.expect(lx.TOKEN_KEYWORD, "Return")
     return ast.ReturnStmt()
 
   # --- Graphics ---
 
-  proc parse_line():
-    expect(lx.TOKEN_KEYWORD, "Line")
-    if check(lx.TOKEN_DELIMITER, "("):
-      advance()
-      let x1 = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ",")
-      let y1 = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ")")
-      expect(lx.TOKEN_OPERATOR, "-")
-      expect(lx.TOKEN_DELIMITER, "(")
-      let x2 = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ",")
-      let y2 = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ")")
+  proc parse_line(self):
+    self.expect(lx.TOKEN_KEYWORD, "Line")
+    # Check for Line Input #filenum, var
+    if self.check(lx.TOKEN_KEYWORD, "Input"):
+      self.advance()
+      if self.check(lx.TOKEN_OPERATOR, "#"):
+        self.advance()
+      let filenum = self.expect(lx.TOKEN_INTEGER)["value"]
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+      let variable = self.expect(lx.TOKEN_IDENTIFIER)["value"]
+      return ast.LineInputStmt(filenum, variable)
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      self.advance()
+      let x1 = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ",")
+      let y1 = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ")")
+      self.expect(lx.TOKEN_OPERATOR, "-")
+      self.expect(lx.TOKEN_DELIMITER, "(")
+      let x2 = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ",")
+      let y2 = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ")")
       let color = nil
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-        color = parse_expression()
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+        color = self.parse_expression()
       let box = nil
-      if check(lx.TOKEN_KEYWORD, "B"):
-        advance()
+      if self.check(lx.TOKEN_KEYWORD, "B"):
+        self.advance()
         box = "B"
       return ast.LineStmt(x1, y1, x2, y2, color, box)
-    # Step method: Line - (x2, y2)
-    let tok = advance()
-    if check(lx.TOKEN_OPERATOR, "-"):
-      advance()
-      expect(lx.TOKEN_DELIMITER, "(")
-      let x2 = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ",")
-      let y2 = parse_expression()
-      expect(lx.TOKEN_DELIMITER, ")")
+    if self.check(lx.TOKEN_OPERATOR, "-"):
+      self.advance()
+      self.expect(lx.TOKEN_DELIMITER, "(")
+      let x2 = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ",")
+      let y2 = self.parse_expression()
+      self.expect(lx.TOKEN_DELIMITER, ")")
       return ast.LineStmt(nil, nil, x2, y2, nil, nil)
+    return nil
 
-  proc parse_circle():
-    expect(lx.TOKEN_KEYWORD, "Circle")
-    expect(lx.TOKEN_DELIMITER, "(")
-    let x = parse_expression()
-    expect(lx.TOKEN_DELIMITER, ",")
-    let y = parse_expression()
-    expect(lx.TOKEN_DELIMITER, ")")
-    expect(lx.TOKEN_DELIMITER, ",")
-    let radius = parse_expression()
+  proc parse_circle(self):
+    self.expect(lx.TOKEN_KEYWORD, "Circle")
+    self.expect(lx.TOKEN_DELIMITER, "(")
+    let x = self.parse_expression()
+    self.expect(lx.TOKEN_DELIMITER, ",")
+    let y = self.parse_expression()
+    self.expect(lx.TOKEN_DELIMITER, ")")
+    self.expect(lx.TOKEN_DELIMITER, ",")
+    let radius = self.parse_expression()
     let color = nil
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
-      color = parse_expression()
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
+      color = self.parse_expression()
     return ast.CircleStmt(x, y, radius, color)
 
-  proc parse_pset():
-    expect(lx.TOKEN_KEYWORD, "PSet")
-    expect(lx.TOKEN_DELIMITER, "(")
-    let x = parse_expression()
-    expect(lx.TOKEN_DELIMITER, ",")
-    let y = parse_expression()
-    expect(lx.TOKEN_DELIMITER, ")")
+  proc parse_pset(self):
+    self.expect(lx.TOKEN_KEYWORD, "PSet")
+    self.expect(lx.TOKEN_DELIMITER, "(")
+    let x = self.parse_expression()
+    self.expect(lx.TOKEN_DELIMITER, ",")
+    let y = self.parse_expression()
+    self.expect(lx.TOKEN_DELIMITER, ")")
     let color = nil
-    if check(lx.TOKEN_DELIMITER, ","):
-      advance()
-      color = parse_expression()
+    if self.check(lx.TOKEN_DELIMITER, ","):
+      self.advance()
+      color = self.parse_expression()
     return ast.PSetStmt(x, y, color)
 
-  proc parse_cls():
-    expect(lx.TOKEN_KEYWORD, "Cls")
+  proc parse_cls(self):
+    self.expect(lx.TOKEN_KEYWORD, "Cls")
     return ast.ClsStmt()
 
   # --- DefType ---
 
-  proc parse_deftype():
-    let type_name = advance()["value"]
+  proc parse_deftype(self):
+    let type_name = self.advance()["value"]
     let ranges = []
-    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF):
-      let start_letter = expect(lx.TOKEN_IDENTIFIER)["value"]
+    while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF):
+      let start_letter = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       let end_letter = start_letter
-      if check(lx.TOKEN_OPERATOR, "-"):
-        advance()
-        end_letter = expect(lx.TOKEN_IDENTIFIER)["value"]
+      if self.check(lx.TOKEN_OPERATOR, "-"):
+        self.advance()
+        end_letter = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       push(ranges, {"start": start_letter, "end": end_letter})
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
     return ast.DefTypeStmt(type_name, ranges)
 
   # --- Load / Unload ---
 
-  proc parse_load():
-    expect(lx.TOKEN_KEYWORD, "Load")
-    let form_name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_load(self):
+    self.expect(lx.TOKEN_KEYWORD, "Load")
+    let form_name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     return ast.LoadStmt(form_name)
 
-  proc parse_unload():
-    expect(lx.TOKEN_KEYWORD, "Unload")
-    let form_name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_unload(self):
+    self.expect(lx.TOKEN_KEYWORD, "Unload")
+    let form_name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     return ast.UnloadStmt(form_name)
 
   # --- Stop ---
 
-  proc parse_stop():
-    expect(lx.TOKEN_KEYWORD, "Stop")
+  proc parse_stop(self):
+    self.expect(lx.TOKEN_KEYWORD, "Stop")
     return ast.StopStmt()
 
-  proc parse_set_stmt():
-    expect(lx.TOKEN_KEYWORD, "Set")
-    let target = parse_expression()
-    expect(lx.TOKEN_OPERATOR, "=")
-    let value = parse_expression()
+  proc parse_set_stmt(self):
+    self.expect(lx.TOKEN_KEYWORD, "Set")
+    let target = self.parse_expression()
+    self.expect(lx.TOKEN_OPERATOR, "=")
+    let value = self.parse_expression()
     return ast.SetStatement(target, value)
 
-  proc parse_call_stmt():
-    expect(lx.TOKEN_KEYWORD, "Call")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_call_stmt(self):
+    self.expect(lx.TOKEN_KEYWORD, "Call")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let args = []
-    if check(lx.TOKEN_DELIMITER, "("):
-      args = parse_args()
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      args = self.parse_args()
     return ast.CallStatement(name, args)
 
-  proc parse_identifier_stmt():
-    let tok = advance()
+  proc parse_identifier_stmt(self):
+    let tok = self.advance()
     let name = tok["value"]
-    if check(lx.TOKEN_DELIMITER, "("):
-      let args = parse_args()
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      let args = self.parse_args()
       return ast.FunctionCall(name, args)
-    if check(lx.TOKEN_OPERATOR, "="):
-      advance()
-      let value = parse_expression()
+    if self.check(lx.TOKEN_OPERATOR, "="):
+      self.advance()
+      let value = self.parse_expression()
       return ast.Assignment(ast.Identifier(name), value)
-    # Implicit call with arguments (VB4: MsgBox "Hello")
-    # Parse comma-separated expressions until newline
+    if self.check(lx.TOKEN_DELIMITER, ":"):
+      self.advance()
+      return ast.LabelDef(name)
     let args = []
-    while not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
-      if check(lx.TOKEN_DELIMITER, ","):
-        advance()
-      push(args, parse_expression())
-      if not check(lx.TOKEN_NEWLINE) and not check(lx.TOKEN_EOF) and not check(lx.TOKEN_COMMENT):
-        if not check(lx.TOKEN_DELIMITER, ","):
+    while not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF) and not self.check(lx.TOKEN_COMMENT):
+      if self.check(lx.TOKEN_DELIMITER, ","):
+        self.advance()
+      push(args, self.parse_expression())
+      if not self.check(lx.TOKEN_NEWLINE) and not self.check(lx.TOKEN_EOF) and not self.check(lx.TOKEN_COMMENT):
+        if not self.check(lx.TOKEN_DELIMITER, ","):
           break
     return ast.CallStatement(name, args)
 
   # --- Top-level declarations ---
 
-  proc parse_sub():
-    expect(lx.TOKEN_KEYWORD, "Sub")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_sub(self):
+    self.expect(lx.TOKEN_KEYWORD, "Sub")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let params = []
-    if check(lx.TOKEN_DELIMITER, "("):
-      params = parse_params()
-    skip_newlines()
-    let body = parse_block(["End", "End Sub"])
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Sub"):
-        advance()
-    skip_newlines()
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      params = self.parse_params()
+    self.skip_newlines()
+    let body = self.parse_block(["End", "End Sub"])
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Sub"):
+        self.advance()
+    self.skip_newlines()
     return ast.SubDecl(name, params, body)
 
-  proc parse_function():
-    expect(lx.TOKEN_KEYWORD, "Function")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_function(self):
+    self.expect(lx.TOKEN_KEYWORD, "Function")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let params = []
-    if check(lx.TOKEN_DELIMITER, "("):
-      params = parse_params()
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      params = self.parse_params()
     let as_type = nil
-    if check(lx.TOKEN_KEYWORD, "As"):
-      advance()
-      as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
-    skip_newlines()
-    let body = parse_block(["End", "End Function"])
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Function"):
-        advance()
-    skip_newlines()
+    if self.check(lx.TOKEN_KEYWORD, "As"):
+      self.advance()
+      as_type = self.expect(lx.TOKEN_IDENTIFIER)["value"]
+    self.skip_newlines()
+    let body = self.parse_block(["End", "End Function"])
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Function"):
+        self.advance()
+    self.skip_newlines()
     return ast.FunctionDecl(name, params, as_type, body)
 
-  proc parse_property():
-    expect(lx.TOKEN_KEYWORD, "Property")
-    let kind = expect(lx.TOKEN_KEYWORD)["value"]
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_property(self):
+    self.expect(lx.TOKEN_KEYWORD, "Property")
+    let kind = self.expect(lx.TOKEN_KEYWORD)["value"]
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let params = []
-    if check(lx.TOKEN_DELIMITER, "("):
-      params = parse_params()
+    if self.check(lx.TOKEN_DELIMITER, "("):
+      params = self.parse_params()
     let as_type = nil
-    if check(lx.TOKEN_KEYWORD, "As"):
-      advance()
-      as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
-    skip_newlines()
-    let body = parse_block(["End", "End Property"])
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Property"):
-        advance()
-    skip_newlines()
+    if self.check(lx.TOKEN_KEYWORD, "As"):
+      self.advance()
+      as_type = self.expect(lx.TOKEN_IDENTIFIER)["value"]
+    self.skip_newlines()
+    let body = self.parse_block(["End", "End Property"])
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Property"):
+        self.advance()
+    self.skip_newlines()
     if kind == "Get":
       return ast.PropertyGet(name, params, as_type, body)
     if kind == "Let":
       return ast.PropertyLet(name, params, body)
     return ast.PropertySet(name, params, body)
 
-  proc parse_type():
-    expect(lx.TOKEN_KEYWORD, "Type")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_type(self):
+    self.expect(lx.TOKEN_KEYWORD, "Type")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let fields = []
-    skip_newlines()
-    while not check(lx.TOKEN_KEYWORD, "End") and not check(lx.TOKEN_EOF):
-      let field_name = expect(lx.TOKEN_IDENTIFIER)["value"]
+    self.skip_newlines()
+    while not self.check(lx.TOKEN_KEYWORD, "End") and not self.check(lx.TOKEN_EOF):
+      let field_name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       let as_type = nil
-      if check(lx.TOKEN_KEYWORD, "As"):
-        advance()
-        as_type = expect(lx.TOKEN_IDENTIFIER)["value"]
+      if self.check(lx.TOKEN_KEYWORD, "As"):
+        self.advance()
+        as_type = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       push(fields, ast.VariableDecl(field_name, as_type))
-      skip_newlines()
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Type"):
-        advance()
-    skip_newlines()
+      self.skip_newlines()
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Type"):
+        self.advance()
+    self.skip_newlines()
     return ast.TypeDecl(name, fields)
 
-  proc parse_enum():
-    expect(lx.TOKEN_KEYWORD, "Enum")
-    let name = expect(lx.TOKEN_IDENTIFIER)["value"]
+  proc parse_enum(self):
+    self.expect(lx.TOKEN_KEYWORD, "Enum")
+    let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
     let members = []
-    skip_newlines()
-    while not check(lx.TOKEN_KEYWORD, "End") and not check(lx.TOKEN_EOF):
-      let member_name = expect(lx.TOKEN_IDENTIFIER)["value"]
+    self.skip_newlines()
+    while not self.check(lx.TOKEN_KEYWORD, "End") and not self.check(lx.TOKEN_EOF):
+      let member_name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
       let member_value = nil
-      if check(lx.TOKEN_OPERATOR, "="):
-        advance()
-        member_value = parse_expression()
+      if self.check(lx.TOKEN_OPERATOR, "="):
+        self.advance()
+        member_value = self.parse_expression()
       push(members, {"name": member_name, "value": member_value})
-      skip_newlines()
-    if check(lx.TOKEN_KEYWORD, "End"):
-      advance()
-      if check(lx.TOKEN_KEYWORD, "Enum"):
-        advance()
-    skip_newlines()
+      self.skip_newlines()
+    if self.check(lx.TOKEN_KEYWORD, "End"):
+      self.advance()
+      if self.check(lx.TOKEN_KEYWORD, "Enum"):
+        self.advance()
+    self.skip_newlines()
     return ast.EnumDecl(name, members)
 
   # --- Main parse entry point ---
 
-  skip_newlines()
-  let module = ast.Module()
-  while not check(lx.TOKEN_EOF):
-    if check(lx.TOKEN_KEYWORD, "Sub"):
-      push(module.declarations, parse_sub())
-    elif check(lx.TOKEN_KEYWORD, "Function"):
-      push(module.declarations, parse_function())
-    elif check(lx.TOKEN_KEYWORD, "Property"):
-      push(module.declarations, parse_property())
-    elif check(lx.TOKEN_KEYWORD, "Type"):
-      push(module.declarations, parse_type())
-    elif check(lx.TOKEN_KEYWORD, "Enum"):
-      push(module.declarations, parse_enum())
-    elif check(lx.TOKEN_KEYWORD, "Declare"):
-      # Skip Declare statements for now
-      advance()
-      skip_newlines()
-    elif check(lx.TOKEN_KEYWORD, "Event"):
-      advance()
-      let name = expect(lx.TOKEN_IDENTIFIER)["value"]
-      let params = []
-      if check(lx.TOKEN_DELIMITER, "("):
-        params = parse_params()
-      push(module.declarations, ast.EventDecl(name, params))
-    elif check(lx.TOKEN_KEYWORD, "Option"):
-      advance()
-      skip_newlines()
-    elif check(lx.TOKEN_KEYWORD, "Attribute"):
-      advance()
-      skip_newlines()
-    else:
-      break
+  proc run(self):
+    self.skip_newlines()
+    let module = ast.Module()
+    while not self.check(lx.TOKEN_EOF):
+      if self.check(lx.TOKEN_KEYWORD, "Sub"):
+        push(module.declarations, self.parse_sub())
+      elif self.check(lx.TOKEN_KEYWORD, "Function"):
+        push(module.declarations, self.parse_function())
+      elif self.check(lx.TOKEN_KEYWORD, "Property"):
+        push(module.declarations, self.parse_property())
+      elif self.check(lx.TOKEN_KEYWORD, "Type"):
+        push(module.declarations, self.parse_type())
+      elif self.check(lx.TOKEN_KEYWORD, "Enum"):
+        push(module.declarations, self.parse_enum())
+      elif self.check(lx.TOKEN_KEYWORD, "Declare"):
+        self.advance()
+        self.skip_newlines()
+      elif self.check(lx.TOKEN_KEYWORD, "Event"):
+        self.advance()
+        let name = self.expect(lx.TOKEN_IDENTIFIER)["value"]
+        let params = []
+        if self.check(lx.TOKEN_DELIMITER, "("):
+          params = self.parse_params()
+        push(module.declarations, ast.EventDecl(name, params))
+      elif self.check(lx.TOKEN_KEYWORD, "Option"):
+        self.advance()
+        self.skip_newlines()
+      elif self.check(lx.TOKEN_KEYWORD, "Attribute"):
+        self.advance()
+        self.skip_newlines()
+      else:
+        break
+    return module
 
-  return module
+## Parser: recursive descent parser for VB4
+proc parse(tokens):
+  let parser = Parser(tokens)
+  return parser.run()

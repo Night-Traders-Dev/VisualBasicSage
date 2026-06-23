@@ -32,7 +32,6 @@ let KEYWORDS = [
   "Friend", "Global",
   "Option", "Explicit", "Base", "Compare",
   "On", "Error", "GoTo", "Resume", "Resume Next",
-  "As", "To", "Is",
   "With", "End With",
   "Event", "RaiseEvent",
   "Implements",
@@ -61,141 +60,140 @@ proc is_keyword(s):
       return true
   return false
 
-## Lexer: tokenizes VB4 source into a token list
-proc lex(source):
-  let tokens = []
-  let pos = 0
-  let line = 1
-  let col = 1
-  let src_len = len(source)
+class Lexer:
+  proc init(self, source):
+    self.source = source
+    self.pos = 0
+    self.line = 1
+    self.col = 1
+    self.tokens = []
+    self.src_len = len(source)
 
-  ## Peek at current character
-  proc peek(offset=0):
-    let idx = pos + offset
-    if idx < src_len:
-      return source[idx]
+  proc peek(self, offset):
+    if offset == nil:
+      offset = 0
+    let idx = self.pos + offset
+    if idx < self.src_len:
+      return self.source[idx]
     return "\0"
 
-  ## Advance one character, tracking position
-  proc advance():
-    let ch = source[pos]
-    pos = pos + 1
+  proc advance(self):
+    let ch = self.source[self.pos]
+    self.pos = self.pos + 1
     if ch == "\n":
-      line = line + 1
-      col = 1
+      self.line = self.line + 1
+      self.col = 1
     else:
-      col = col + 1
+      self.col = self.col + 1
     return ch
 
-  ## Skip whitespace (spaces and tabs)
-  proc skip_whitespace():
-    while pos < src_len:
-      let ch = peek()
+  proc skip_whitespace(self):
+    while self.pos < self.src_len:
+      let ch = self.peek()
       if ch == " " or ch == "\t" or ch == "\r":
-        advance()
+        self.advance()
       else:
         break
 
-  ## Read a string literal
-  proc read_string(delim):
+  proc read_string(self, delim):
     let value = ""
-    while pos < src_len:
-      let ch = advance()
+    while self.pos < self.src_len:
+      let ch = self.advance()
       if ch == delim:
         return value
       if ch == "\n":
-        raise "Unterminated string at line " + str(line)
+        raise "Unterminated string at line " + str(self.line)
       value = value + ch
-    raise "Unterminated string at line " + str(line)
+    raise "Unterminated string at line " + str(self.line)
 
-  ## Read a number literal
-  proc read_number():
+  proc read_number(self):
     let value = ""
     let is_float = false
-    while pos < src_len:
-      let ch = peek()
+    while self.pos < self.src_len:
+      let ch = self.peek()
       if ch >= "0" and ch <= "9":
-        value = value + advance()
+        value = value + self.advance()
       elif ch == "." and not is_float:
         is_float = true
-        value = value + advance()
+        value = value + self.advance()
       else:
         break
     let type_ = TOKEN_INTEGER
     if is_float:
       type_ = TOKEN_FLOAT
-    let start_col = col - len(value)
-    push(tokens, make_token(type_, value, line, start_col))
+    let start_col = self.col - len(value)
+    push(self.tokens, make_token(type_, value, self.line, start_col))
 
-  ## Read an identifier or keyword
-  proc read_identifier():
+  proc read_identifier(self):
     let value = ""
-    while pos < src_len:
-      let ch = peek()
+    while self.pos < self.src_len:
+      let ch = self.peek()
       if (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "_":
-        value = value + advance()
+        value = value + self.advance()
       else:
         break
-    let start_col = col - len(value)
+    let start_col = self.col - len(value)
     let type_ = TOKEN_IDENTIFIER
     if is_keyword(value):
       type_ = TOKEN_KEYWORD
-    push(tokens, make_token(type_, value, line, start_col))
+    push(self.tokens, make_token(type_, value, self.line, start_col))
 
-  ## Read an operator
-  proc read_operator():
-    let start_col = col
-    let ch = advance()
+  proc read_operator(self):
+    let start_col = self.col
+    let ch = self.advance()
     let value = ch
-    if ch == "<" and peek() == ">":
-      value = value + advance()
-    elif (ch == "=" or ch == "<" or ch == ">" or ch == "!") and peek() == "=":
-      value = value + advance()
-    elif (ch == "&" or ch == "@") and (peek() == "&" or peek() == "@"):
-      value = value + advance()
-    push(tokens, make_token(TOKEN_OPERATOR, value, line, start_col))
+    if ch == "<" and self.peek() == ">":
+      value = value + self.advance()
+    elif (ch == "=" or ch == "<" or ch == ">" or ch == "!") and self.peek() == "=":
+      value = value + self.advance()
+    elif (ch == "&" or ch == "@") and (self.peek() == "&" or self.peek() == "@"):
+      value = value + self.advance()
+    push(self.tokens, make_token(TOKEN_OPERATOR, value, self.line, start_col))
 
-  ## Main tokenization loop
-  while pos < src_len:
-    skip_whitespace()
-    if pos >= src_len:
-      break
+  proc tokenize(self):
+    while self.pos < self.src_len:
+      self.skip_whitespace()
+      if self.pos >= self.src_len:
+        break
 
-    let ch = peek()
-    let start_col = col
+      let ch = self.peek()
+      let start_col = self.col
 
-    if ch == "'":
-      # Comment (VB4 single-quote)
-      advance()
-      let comment = ""
-      while pos < src_len and peek() != "\n":
-        comment = comment + advance()
-      push(tokens, make_token(TOKEN_COMMENT, comment, line, start_col))
+      if ch == "'":
+        self.advance()
+        let comment = ""
+        while self.pos < self.src_len and self.peek() != "\n":
+          comment = comment + self.advance()
+        push(self.tokens, make_token(TOKEN_COMMENT, comment, self.line, start_col))
 
-    elif ch == "\"":
-      # String literal
-      advance()
-      let value = read_string("\"")
-      push(tokens, make_token(TOKEN_STRING, value, line, start_col))
+      elif ch == "\"":
+        self.advance()
+        let value = self.read_string("\"")
+        push(self.tokens, make_token(TOKEN_STRING, value, self.line, start_col))
 
-    elif ch >= "0" and ch <= "9":
-      read_number()
+      elif ch >= "0" and ch <= "9":
+        self.read_number()
 
-    elif (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or ch == "_":
-      read_identifier()
+      elif (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or ch == "_":
+        self.read_identifier()
 
-    elif ch == "\n":
-      advance()
-      push(tokens, make_token(TOKEN_NEWLINE, "\n", line - 1, col))
+      elif ch == "\n":
+        self.advance()
+        push(self.tokens, make_token(TOKEN_NEWLINE, "\n", self.line - 1, self.col))
 
-    elif ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "^" or ch == "\\" or ch == "=" or ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "@" or ch == "#":
-      read_operator()
+      elif ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "^" or ch == "\\" or ch == "=" or ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "@" or ch == "#":
+        self.read_operator()
 
-    elif ch == "(" or ch == ")" or ch == "," or ch == "." or ch == "{" or ch == ":":
-      push(tokens, make_token(TOKEN_DELIMITER, advance(), line, start_col))
+      elif ch == "(" or ch == ")" or ch == "," or ch == "." or ch == "{" or ch == ":":
+        push(self.tokens, make_token(TOKEN_DELIMITER, self.advance(), self.line, start_col))
 
-    else:
-      raise "Unexpected character " + ch + " at line " + str(line)
+      else:
+        raise "Unexpected character " + ch + " at line " + str(self.line)
 
-  push(tokens, make_token(TOKEN_EOF, "", line, col))
-  return tokens
+    push(self.tokens, make_token(TOKEN_EOF, "", self.line, self.col))
+    return self.tokens
+
+## Lexer: tokenizes VB4 source into a token list (backward-compatible wrapper)
+proc lex(source):
+  let lexer = Lexer(source)
+  return lexer.tokenize()

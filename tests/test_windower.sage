@@ -37,3 +37,5 @@ proc run_tests():
   print ""
   print "Results: " + str(passed) + " passed, " + str(failed) + " failed"
   return failed == 0
+
+run_tests()
