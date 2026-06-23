@@ -1,51 +1,135 @@
-# Graphics runtime - drawing primitives and rendering
+import gpu
 
-## RGB color helper
-proc rgb(r, g, b):
-  return r * 65536 + g * 256 + b
-
-let COLOR_BLACK = rgb(0, 0, 0)
-let COLOR_WHITE = rgb(255, 255, 255)
-let COLOR_RED = rgb(255, 0, 0)
-let COLOR_GREEN = rgb(0, 255, 0)
-let COLOR_BLUE = rgb(0, 0, 255)
-let COLOR_YELLOW = rgb(255, 255, 0)
-let COLOR_GRAY = rgb(128, 128, 128)
-let COLOR_BUTTON_FACE = rgb(212, 208, 200)
+let COLOR_BLACK = [0.0, 0.0, 0.0, 1.0]
+let COLOR_WHITE = [1.0, 1.0, 1.0, 1.0]
+let COLOR_RED = [1.0, 0.0, 0.0, 1.0]
+let COLOR_GREEN = [0.0, 1.0, 0.0, 1.0]
+let COLOR_BLUE = [0.0, 0.0, 1.0, 1.0]
+let COLOR_YELLOW = [1.0, 1.0, 0.0, 1.0]
+let COLOR_GRAY = [0.5, 0.5, 0.5, 1.0]
+let COLOR_BUTTON_FACE = [0.83, 0.82, 0.78, 1.0]
 
 class Graphics:
-  proc init(self):
-    self.fore_color = COLOR_BLACK
-    self.back_color = COLOR_WHITE
-    self.fill_style = 1  # 0=Solid, 1=Transparent
-    self.draw_width = 1
-    self.font_name = "Arial"
-    self.font_size = 8
+    proc init(self, ctx=nil):
+        self.ctx = ctx
+        self.fore_color = COLOR_BLACK
+        self.back_color = COLOR_WHITE
+        self.fill_style = 1
+        self.draw_width = 1
+        self.font_name = "Arial"
+        self.font_size = 8
 
-  ## Load a bitmap (placeholder)
-  proc load_picture(self, path):
-    return nil
+    proc set_ctx(self, ctx):
+        self.ctx = ctx
 
-  ## Draw text
-  proc draw_text(self, text, x, y):
-    print text  # TODO: render to surface
+    proc load_picture(self, path):
+        return nil
 
-  ## Draw a line
-  proc draw_line(self, x1, y1, x2, y2):
-    return nil  # TODO: implement line drawing
+    proc draw_text(self, text, x, y):
+        if self.ctx == nil:
+            return
+        let t = self.ctx["theme"]
+        let c = self.fore_color
+        if x + len(text) * 8 > 0 and y + t["font_size"] > 0:
+            let cmd = {}
+            cmd["type"] = "text"
+            cmd["x"] = x
+            cmd["y"] = y
+            cmd["text"] = text
+            cmd["color"] = c
+            cmd["font"] = nil
+            push(self.ctx["draw_list"], cmd)
 
-  ## Draw a rectangle
-  proc draw_rect(self, x1, y1, x2, y2):
-    return nil
+    proc draw_line(self, x1, y1, x2, y2):
+        if self.ctx == nil:
+            return
+        let c = self.fore_color
+        let dx = x2 - x1
+        let dy = y2 - y1
+        let len_v = math.sqrt(dx * dx + dy * dy)
+        if len_v < 1.0:
+            return
+        let nx = -dy / len_v * self.draw_width / 2.0
+        let ny = dx / len_v * self.draw_width / 2.0
+        let cmd = {}
+        cmd["type"] = "rect"
+        cmd["x"] = x1 + nx
+        cmd["y"] = y1 + ny
+        cmd["w"] = len_v
+        cmd["h"] = self.draw_width
+        cmd["color"] = c
+        push(self.ctx["draw_list"], cmd)
 
-  ## Fill a rectangle
-  proc fill_rect(self, x1, y1, x2, y2, color):
-    return nil
+    proc draw_rect(self, x1, y1, x2, y2):
+        if self.ctx == nil:
+            return
+        let c = self.fore_color
+        let w = x2 - x1
+        let h = y2 - y1
+        if w < 0:
+            w = -w; x1 = x2
+        if h < 0:
+            h = -h; y1 = y2
+        self.draw_border(x1, y1, w, h, c, self.draw_width)
 
-  ## Draw a circle
-  proc draw_circle(self, cx, cy, r):
-    return nil
+    proc draw_border(self, x, y, w, h, color, width_v):
+        if self.ctx == nil:
+            return
+        let cmds = []
+        let cmd1 = {}; cmd1["type"] = "rect"; cmd1["x"] = x; cmd1["y"] = y; cmd1["w"] = w; cmd1["h"] = width_v; cmd1["color"] = color; push(cmds, cmd1)
+        let cmd2 = {}; cmd2["type"] = "rect"; cmd2["x"] = x; cmd2["y"] = y + h - width_v; cmd2["w"] = w; cmd2["h"] = width_v; cmd2["color"] = color; push(cmds, cmd2)
+        let cmd3 = {}; cmd3["type"] = "rect"; cmd3["x"] = x; cmd3["y"] = y; cmd3["w"] = width_v; cmd3["h"] = h; cmd3["color"] = color; push(cmds, cmd3)
+        let cmd4 = {}; cmd4["type"] = "rect"; cmd4["x"] = x + w - width_v; cmd4["y"] = y; cmd4["w"] = width_v; cmd4["h"] = h; cmd4["color"] = color; push(cmds, cmd4)
+        let ci = 0
+        while ci < len(cmds):
+            push(self.ctx["draw_list"], cmds[ci])
+            ci = ci + 1
 
-  ## Draw a point
-  proc draw_point(self, x, y, color):
-    return nil
+    proc fill_rect(self, x1, y1, x2, y2, color_v):
+        if self.ctx == nil:
+            return
+        let c = color_v
+        if c == nil:
+            c = self.fore_color
+        let w = x2 - x1
+        let h = y2 - y1
+        if w < 0:
+            w = -w; x1 = x2
+        if h < 0:
+            h = -h; y1 = y2
+        let cmd = {}
+        cmd["type"] = "rect"
+        cmd["x"] = x1
+        cmd["y"] = y1
+        cmd["w"] = w
+        cmd["h"] = h
+        cmd["color"] = c
+        push(self.ctx["draw_list"], cmd)
+
+    proc draw_circle(self, cx, cy, r):
+        if self.ctx == nil:
+            return
+        let diam = r * 2
+        let cmd = {}
+        cmd["type"] = "rect"
+        cmd["x"] = cx - r
+        cmd["y"] = cy - r
+        cmd["w"] = diam
+        cmd["h"] = diam
+        cmd["color"] = self.fore_color
+        push(self.ctx["draw_list"], cmd)
+
+    proc draw_point(self, x, y, color_v):
+        if self.ctx == nil:
+            return
+        let c = color_v
+        if c == nil:
+            c = self.fore_color
+        let cmd = {}
+        cmd["type"] = "rect"
+        cmd["x"] = x
+        cmd["y"] = y
+        cmd["w"] = 1
+        cmd["h"] = 1
+        cmd["color"] = c
+        push(self.ctx["draw_list"], cmd)

@@ -31,7 +31,7 @@ proc run_file(path):
   interp.execute(tree)
   return 0
 
-proc run_ide():
+proc run_headless_ide():
   print "Starting IDE (headless mode)..."
   let shell = sh.IdeShell()
   shell.new_project()
@@ -57,6 +57,11 @@ proc run_ide():
     else:
       print "Unknown command: " + line
 
+proc launch_gui_ide():
+  print "Starting VisualBasicSage GUI IDE..."
+  import ide.gui as gui
+  gui.launch_gui_ide()
+
 proc main(args):
   show_banner()
   if len(args) == 0:
@@ -64,7 +69,8 @@ proc main(args):
     print ""
     print "Commands:"
     print "  run <file>     Run a VB4 source file"
-    print "  ide            Start the IDE (headless)"
+    print "  ide            Start the IDE (graphical)"
+    print "  headless       Start the IDE (headless/text mode)"
     print "  version        Show version"
     return 0
   let cmd = args[0]
@@ -74,7 +80,10 @@ proc main(args):
       return 1
     return run_file(args[1])
   elif cmd == "ide":
-    run_ide()
+    launch_gui_ide()
+    return 0
+  elif cmd == "headless":
+    run_headless_ide()
     return 0
   elif cmd == "version":
     print VERSION
